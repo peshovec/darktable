@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 
 // some internal details of the modules we're trying to optimize.
 // these are reproduced here because we want to stick to the specific version unless
@@ -215,7 +216,7 @@ static inline int float2params(const float *f, module_params_t *m)
   return j;
 }
 
-static inline void write_hex(FILE *f, uint32_t *input, int len)
+static inline void write_hex(FILE *f, uint8_t *input, int len)
 {
   const char hex[16] =
   {
@@ -243,19 +244,19 @@ static inline void write_xmp(module_params_t *m)
 
   // write module params
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)&m->exp, sizeof(dt_iop_exposure_params_t)/sizeof(uint32_t));
+  write_hex(f, (uint8_t *)&m->exp, sizeof(dt_iop_exposure_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)&m->corr, sizeof(dt_iop_colorcorrection_params_t)/sizeof(uint32_t));
+  write_hex(f, (uint8_t *)&m->corr, sizeof(dt_iop_colorcorrection_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)&m->curve, sizeof(dt_iop_tonecurve_params_t)/sizeof(uint32_t));
+  write_hex(f, (uint8_t *)&m->curve, sizeof(dt_iop_tonecurve_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)&m->zones, sizeof(dt_iop_colorzones_params_t)/sizeof(uint32_t));
+  write_hex(f, (uint8_t *)&m->zones, sizeof(dt_iop_colorzones_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)&m->mono, sizeof(dt_iop_monochrome_params_t)/sizeof(uint32_t));
+  write_hex(f, (uint8_t *)&m->mono, sizeof(dt_iop_monochrome_params_t));
   fprintf(f, "</rdf:li>\n");
 
   fwrite(template_foot_xmp, template_foot_xmp_len, 1, f);
@@ -277,6 +278,7 @@ void eval_diff(float *param, float *sample, int param_cnt, int sample_cnt, void 
   assert(check == param_cnt);
   write_xmp(d->m);
   // execute dt-cli
+  system("rm output.pfm input.pfm.xmp");
   system("darktable-cli input.pfm input.xmp output.pfm");
   // read back image and write to float *sample
   FILE *f = fopen("output.pfm", "rb");
@@ -294,9 +296,15 @@ int main(int argc, char *argv[])
 
   float *param = (float *)malloc(sizeof(float)*100);
   const int param_cnt = params2float(data.m, param);
+  assert(param_cnt <= 100);
 
   // load reference output image into sample array:
   FILE *f = fopen("reference.pfm", "rb");
+  if(!f)
+  {
+    fprintf(stderr, "usage: put into this directory: input.pfm, reference.pfm; then run.\n");
+    exit(1);
+  }
   int width, height;
   fscanf(f, "PF\n%d %d\n%*[^\n]", &width, &height);
   fgetc(f); // \n
@@ -305,14 +313,19 @@ int main(int argc, char *argv[])
   fread(sample, sizeof(float), sample_cnt, f);
   fclose(f);
 
+  fprintf(stdout, "[fit] optimizing %d params over %d samples.\n", param_cnt, sample_cnt);
+
   float opts[LM_OPTS_SZ], info[LM_INFO_SZ];
   // opts[0]=LM_INIT_MU; opts[1]=1E-3; opts[2]=1E-5; opts[3]=1E-7; // terminates way to early
   // opts[0]=LM_INIT_MU; opts[1]=1E-7; opts[2]=1E-7; opts[3]=1E-12; // known to go through
-  opts[0]=1e-2f; opts[1]=1E-7; opts[2]=1E-7; opts[3]=1E-12; // known to go through
+  // opts[0]=LM_INIT_MU; opts[1]=1E-7; opts[2]=1E-7; opts[3]=1E-12; // known to go through
   // opts[0]=LM_INIT_MU; opts[1]=1E-7; opts[2]=1E-8; opts[3]=1E-13; // goes through, some nans
-  // opts[0]=LM_INIT_MU; opts[1]=1E-8; opts[2]=1E-8; opts[3]=1E-15;
+  opts[0]=LM_INIT_MU; opts[1]=1E-8; opts[2]=1E-8; opts[3]=1E-15;
   opts[4]= LM_DIFF_DELTA;
   slevmar_dif(eval_diff, param, sample, param_cnt, sample_cnt, 1000, opts, info, NULL, NULL, &data);
+
+  // store final parameters:
+  write_xmp(data.m);
 
   free(data.m);
   free(param);
