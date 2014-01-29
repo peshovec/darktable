@@ -1,6 +1,10 @@
 #include "levmar-2.6/levmar.h"
+#include "template.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <stdint.h>
+#include <string.h>
 
 // some internal details of the modules we're trying to optimize.
 // these are reproduced here because we want to stick to the specific version unless
@@ -24,6 +28,7 @@ dt_iop_exposure_params_t;
 // tonecurve
 // ======================================================================
 static const int tonecurve_version = 4;
+#define DT_IOP_TONECURVE_MAXNODES 20
 
 typedef struct dt_iop_tonecurve_node_t
 {
@@ -112,7 +117,10 @@ static inline module_params_t *init_params()
   for(int k=0;k<3;k++) m->curve.tonecurve_nodes[k] = 9; // enough i think.
   for(int i=0;i<3;i++)
     for(int k=0;k<9;k++)
-      m->curve.tonecurve[i][k] = k/8.0f; // start at identity
+    {
+      m->curve.tonecurve[i][k].x = k/8.0f;
+      m->curve.tonecurve[i][k].y = k/8.0f; // start at identity
+    }
   m->curve.tonecurve_autoscale_ab = 0;
   m->curve.tonecurve_preset = 0;
   m->curve.tonecurve_unbound_ab = 0;
@@ -123,7 +131,10 @@ static inline module_params_t *init_params()
   // color zones
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+    {
+      m->zones.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
       m->zones.equalizer_y[ch][k] = 0.5f;
+    }
   m->zones.strength = 0.0;
   m->zones.channel = DT_IOP_COLORZONES_h;
 
@@ -145,7 +156,7 @@ static inline int params2float(const module_params_t *m, float *f)
 
   for(int i=0;i<3;i++)
     for(int k=0;k<9;k++)
-      f[j++] = m->curve.tonecurve[i][k];
+      f[j++] = m->curve.tonecurve[i][k].y;
 
   f[j++] = m->corr.hia;
   f[j++] = m->corr.hib;
@@ -155,7 +166,7 @@ static inline int params2float(const module_params_t *m, float *f)
 
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
-      f[j++] = m->zones.equalizer_x[ch][k];
+      f[j++] = m->zones.equalizer_y[ch][k];
   f[j++] = m->zones.strength;
   // TODO: shall we mutate this? probably not.
   // f[j++] = m->zones.channel+.5f;
@@ -179,7 +190,7 @@ static inline int float2params(const float *f, module_params_t *m)
 
   for(int i=0;i<3;i++)
     for(int k=0;k<9;k++)
-      m->curve.tonecurve[i][k] = f[j++];
+      m->curve.tonecurve[i][k].y = f[j++];
 
   m->corr.hia = f[j++];
   m->corr.hib = f[j++];
@@ -189,7 +200,7 @@ static inline int float2params(const float *f, module_params_t *m)
 
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
-      m->zones.equalizer_x[ch][k] = f[j++];
+      m->zones.equalizer_y[ch][k] = f[j++];
   m->zones.strength = f[j++];
   // TODO: shall we mutate this? probably not.
   // m->zones.channel = (int)roundf(f[j++]);
@@ -216,13 +227,14 @@ static inline void write_hex(FILE *f, uint32_t *input, int len)
   {
     const int hi = input[i] >> 4;
     const int lo = input[i] & 15;
-    fputc(f, hex[hi]);
-    fputc(f, hex[lo]);
+    fputc(hex[hi], f);
+    fputc(hex[lo], f);
   }
 }
 
 static inline void write_xmp(module_params_t *m)
 {
+  FILE *f = fopen("input.xmp", "wb");
 #ifdef MONOCHROME
   fwrite(template_head_xmp, template_head_xmp_len, 1, f);
 #else
@@ -231,27 +243,27 @@ static inline void write_xmp(module_params_t *m)
 
   // write module params
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)m->exposure, sizeof(dt_iop_exposure_t)/sizeof(uint32_t));
+  write_hex(f, (uint32_t *)&m->exp, sizeof(dt_iop_exposure_params_t)/sizeof(uint32_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)m->corr, sizeof(dt_iop_colorcorrection_t)/sizeof(uint32_t));
+  write_hex(f, (uint32_t *)&m->corr, sizeof(dt_iop_colorcorrection_params_t)/sizeof(uint32_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)m->curve, sizeof(dt_iop_tonecurve_t)/sizeof(uint32_t));
+  write_hex(f, (uint32_t *)&m->curve, sizeof(dt_iop_tonecurve_params_t)/sizeof(uint32_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)m->zones, sizeof(dt_iop_colorzones_t)/sizeof(uint32_t));
+  write_hex(f, (uint32_t *)&m->zones, sizeof(dt_iop_colorzones_params_t)/sizeof(uint32_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint32_t *)m->mono, sizeof(dt_iop_monochrome_t)/sizeof(uint32_t));
+  write_hex(f, (uint32_t *)&m->mono, sizeof(dt_iop_monochrome_params_t)/sizeof(uint32_t));
   fprintf(f, "</rdf:li>\n");
 
   fwrite(template_foot_xmp, template_foot_xmp_len, 1, f);
+  fclose(f);
 }
 
 typedef struct opt_data_t
 {
-  uint32_t width, height;
   module_params_t *m;
 }
 opt_data_t;
@@ -261,7 +273,7 @@ void eval_diff(float *param, float *sample, int param_cnt, int sample_cnt, void 
 {
   // now the nasty part.
   opt_data_t *d = (opt_data_t *)data;
-  int check = float2param(param, d->m);
+  int check = float2params(param, d->m);
   assert(check == param_cnt);
   write_xmp(d->m);
   // execute dt-cli
@@ -276,8 +288,6 @@ void eval_diff(float *param, float *sample, int param_cnt, int sample_cnt, void 
 
 int main(int argc, char *argv[])
 {
-  // TODO: load lut or image processed with that?
-
   // get initial data
   opt_data_t data;
   data.m = init_params();
@@ -285,7 +295,15 @@ int main(int argc, char *argv[])
   float *param = (float *)malloc(sizeof(float)*100);
   const int param_cnt = params2float(data.m, param);
 
-  // TODO: load reference output image into sample array:
+  // load reference output image into sample array:
+  FILE *f = fopen("reference.pfm", "rb");
+  int width, height;
+  fscanf(f, "PF\n%d %d\n%*[^\n]", &width, &height);
+  fgetc(f); // \n
+  const int sample_cnt = 3*width*height;
+  float *sample = (float *)malloc(sizeof(float)*sample_cnt);
+  fread(sample, sizeof(float), sample_cnt, f);
+  fclose(f);
 
   float opts[LM_OPTS_SZ], info[LM_INFO_SZ];
   // opts[0]=LM_INIT_MU; opts[1]=1E-3; opts[2]=1E-5; opts[3]=1E-7; // terminates way to early
