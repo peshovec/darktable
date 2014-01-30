@@ -849,6 +849,7 @@ void reload_defaults(dt_iop_module_t *module)
   else if(module->dev->image_storage.colorspace == DT_IMAGE_COLORSPACE_SRGB) g_strlcpy(tmp.iccprofile, "sRGB", sizeof(tmp.iccprofile));
   else if(module->dev->image_storage.colorspace == DT_IMAGE_COLORSPACE_ADOBE_RGB) g_strlcpy(tmp.iccprofile, "adobergb", sizeof(tmp.iccprofile));
   else if(dt_image_is_ldr(&module->dev->image_storage)) g_strlcpy(tmp.iccprofile, "sRGB", sizeof(tmp.iccprofile));
+  else if(dt_image_is_hdr(&module->dev->image_storage)) g_strlcpy(tmp.iccprofile, "linear_rgb", sizeof(tmp.iccprofile));
   memcpy(module->params, &tmp, sizeof(dt_iop_colorin_params_t));
   memcpy(module->default_params, &tmp, sizeof(dt_iop_colorin_params_t));
 }

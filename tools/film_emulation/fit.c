@@ -12,7 +12,9 @@
 // the rest of this code is updated, too.
 
 // define this to optimize for monochrome images
-#define MONOCHROME
+#define USE_MONOCHROME
+// #define USE_EXPOSURE
+// #define USE_AB_CURVES
 
 
 // exposure
@@ -122,7 +124,11 @@ static inline module_params_t *init_params()
       m->curve.tonecurve[i][k].x = k/8.0f;
       m->curve.tonecurve[i][k].y = k/8.0f; // start at identity
     }
+#ifdef USE_AB_CURVES
   m->curve.tonecurve_autoscale_ab = 0;
+#else
+  m->curve.tonecurve_autoscale_ab = 1;
+#endif
   m->curve.tonecurve_preset = 0;
   m->curve.tonecurve_unbound_ab = 0;
 
@@ -152,10 +158,16 @@ static inline int params2float(const module_params_t *m, float *f)
 {
   int j = 0;
 
+#ifdef USE_EXPOSURE
   f[j++] = m->exp.black;
   f[j++] = m->exp.exposure;
+#endif
 
+#ifdef USE_AB_CURVES
   for(int i=0;i<3;i++)
+#else
+    const int i = 0;
+#endif
     for(int k=0;k<9;k++)
       f[j++] = m->curve.tonecurve[i][k].y;
 
@@ -172,7 +184,7 @@ static inline int params2float(const module_params_t *m, float *f)
   // TODO: shall we mutate this? probably not.
   // f[j++] = m->zones.channel+.5f;
 
-#ifdef MONOCHROME
+#ifdef USE_MONOCHROME
   f[j++] = m->mono.a;
   f[j++] = m->mono.b;
   f[j++] = m->mono.size;
@@ -186,10 +198,16 @@ static inline int float2params(const float *f, module_params_t *m)
 {
   int j = 0;
 
+#ifdef USE_EXPOSURE
   m->exp.black = f[j++];
   m->exp.exposure = f[j++];
+#endif
 
+#ifdef USE_AB_CURVES
   for(int i=0;i<3;i++)
+#else
+    const int i = 0;
+#endif
     for(int k=0;k<9;k++)
       m->curve.tonecurve[i][k].y = f[j++];
 
@@ -206,7 +224,7 @@ static inline int float2params(const float *f, module_params_t *m)
   // TODO: shall we mutate this? probably not.
   // m->zones.channel = (int)roundf(f[j++]);
 
-#ifdef MONOCHROME
+#ifdef USE_MONOCHROME
   m->mono.a = f[j++];
   m->mono.b = f[j++];
   m->mono.size = f[j++];
@@ -236,7 +254,7 @@ static inline void write_hex(FILE *f, uint8_t *input, int len)
 static inline void write_xmp(module_params_t *m)
 {
   FILE *f = fopen("input.xmp", "wb");
-#ifdef MONOCHROME
+#ifdef USE_MONOCHROME
   fwrite(template_head_xmp, template_head_xmp_len, 1, f);
 #else
   fwrite(template_color_head_xmp, template_color_head_xmp_len, 1, f);
