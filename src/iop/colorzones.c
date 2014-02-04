@@ -198,6 +198,15 @@ lookup(const float *lut, const float i)
   const float f = DT_IOP_COLORZONES_LUT_RES * i - bin0;
   return lut[bin1]*f + lut[bin0]*(1.-f);
 }
+static float
+lookup_wrap(const float *lut, const float i)
+{
+  const int bin0 = MIN(0xffff, MAX(0, (int)(DT_IOP_COLORZONES_LUT_RES * i)));
+  int bin1 = MAX(0, (int)(DT_IOP_COLORZONES_LUT_RES * i) + 1);
+  if(bin1 > 0xffff) bin1 -= 0xffff;
+  const float f = DT_IOP_COLORZONES_LUT_RES * i - bin0;
+  return lut[bin1]*f + lut[bin0]*(1.-f);
+}
 
 static float strength(float value, float strength)
 {
@@ -220,26 +229,39 @@ process (struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, void *i, v
     const float h = fmodf(atan2f(b, a) + 2.0*M_PI, 2.0*M_PI)/(2.0*M_PI);
     const float C = sqrtf(b*b + a*a);
     float select = 0.0f;
-    float blend = 0.0f;
+    float lut0, lut1, lut2;
+    // float blend = 0.0f;
     switch(d->channel)
     {
       case DT_IOP_COLORZONES_L:
         select = fminf(1.0, in[0]/100.0);
+        lut0 = lookup(d->lut[0], select);
+        lut1 = lookup(d->lut[0], select);
+        lut2 = lookup(d->lut[0], select);
         break;
       case DT_IOP_COLORZONES_C:
         select = fminf(1.0, C/128.0);
+        lut0 = lookup(d->lut[0], select);
+        lut1 = lookup(d->lut[0], select);
+        lut2 = lookup(d->lut[0], select);
         break;
       default:
       case DT_IOP_COLORZONES_h:
         select = h;
-        blend = powf(1.0f - C/128.0f, 2.0f);
+        lut0 = lookup_wrap(d->lut[0], select);
+        lut1 = lookup_wrap(d->lut[0], select);
+        lut2 = lookup_wrap(d->lut[0], select);
+        // blend = powf(1.0f - C/128.0f, 2.0f);
         break;
     }
-    const float Lm =       (blend*.5f + (1.0f-blend)*lookup(d->lut[0], select)) - .5f;
-    const float hm =       (blend*.5f + (1.0f-blend)*lookup(d->lut[2], select)) - .5f;
-    blend *= blend; // saturation isn't as prone to artifacts:
+    // const float Lm =       (blend*.5f + (1.0f-blend)*lookup(d->lut[0], select)) - .5f;
+    // const float hm =       (blend*.5f + (1.0f-blend)*lookup(d->lut[2], select)) - .5f;
+    const float blend = fminf(1.0f, 2.0 * C/128.0f);
+    const float Lm = blend*(lut0 - .5f);
+    const float hm = lut2 - .5f;
+    // blend *= blend; // saturation isn't as prone to artifacts:
     // const float Cm = 2.0 * (blend*.5f + (1.0f-blend)*lookup(d->lut[1], select));
-    const float Cm = 2.0 * lookup(d->lut[1], select);
+    const float Cm = 2.0 * lut1;
     const float L = in[0] * powf(2.0f, 4.0f*Lm);
     out[0] = L;
     out[1] = cosf(2.0*M_PI*(h + hm)) * Cm * C;
@@ -313,9 +335,6 @@ void commit_params (struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pi
   // pull in new params to gegl
   dt_iop_colorzones_data_t *d = (dt_iop_colorzones_data_t *)(piece->data);
   dt_iop_colorzones_params_t *p = (dt_iop_colorzones_params_t *)p1;
-#ifdef HAVE_GEGL
-  // TODO
-#else
 #if 0 // print new preset
   printf("p.channel = %d;\n", p->channel);
   for(int k=0; k<3; k++) for(int i=0; i<DT_IOP_COLORZONES_BANDS; i++)
@@ -339,7 +358,6 @@ void commit_params (struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pi
       dt_draw_curve_set_point(d->curve[ch], DT_IOP_COLORZONES_BANDS+1, p->equalizer_x[ch][1]+1.0, strength(p->equalizer_y[ch][DT_IOP_COLORZONES_BANDS-1],p->strength));
     dt_draw_curve_calc_values(d->curve[ch], 0.0, 1.0, DT_IOP_COLORZONES_LUT_RES, d->lut[3], d->lut[ch]);
   }
-#endif
 }
 
 void init_pipe (struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

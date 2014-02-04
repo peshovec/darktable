@@ -12,9 +12,10 @@
 // the rest of this code is updated, too.
 
 // define this to optimize for monochrome images
-#define USE_MONOCHROME
+// #define USE_MONOCHROME
 // #define USE_EXPOSURE
 // #define USE_AB_CURVES
+// #define USE_SATURATION
 
 
 // exposure
@@ -119,11 +120,17 @@ static inline module_params_t *init_params()
   for(int k=0;k<3;k++) m->curve.tonecurve_type[k] = 2; // MONOTONE_HERMITE
   for(int k=0;k<3;k++) m->curve.tonecurve_nodes[k] = 9; // enough i think.
   for(int i=0;i<3;i++)
-    for(int k=0;k<9;k++)
-    {
-      m->curve.tonecurve[i][k].x = k/8.0f;
-      m->curve.tonecurve[i][k].y = k/8.0f; // start at identity
-    }
+  { // start at identity
+    m->curve.tonecurve[i][0].x = m->curve.tonecurve[i][0].y = .0f;
+    m->curve.tonecurve[i][1].x = m->curve.tonecurve[i][1].y = .03f;
+    m->curve.tonecurve[i][2].x = m->curve.tonecurve[i][2].y = .075f;
+    m->curve.tonecurve[i][3].x = m->curve.tonecurve[i][3].y = .125f;
+    m->curve.tonecurve[i][4].x = m->curve.tonecurve[i][4].y = .25f;
+    m->curve.tonecurve[i][5].x = m->curve.tonecurve[i][5].y = .375f;
+    m->curve.tonecurve[i][6].x = m->curve.tonecurve[i][6].y = .5f;
+    m->curve.tonecurve[i][7].x = m->curve.tonecurve[i][7].y = .75f;
+    m->curve.tonecurve[i][8].x = m->curve.tonecurve[i][8].y = 1.0f;
+  }
 #ifdef USE_AB_CURVES
   m->curve.tonecurve_autoscale_ab = 0;
 #else
@@ -175,7 +182,9 @@ static inline int params2float(const module_params_t *m, float *f)
   f[j++] = m->corr.hib;
   f[j++] = m->corr.loa;
   f[j++] = m->corr.lob;
+#ifdef USE_SATURATION
   f[j++] = m->corr.saturation;
+#endif
 
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
@@ -215,7 +224,9 @@ static inline int float2params(const float *f, module_params_t *m)
   m->corr.hib = f[j++];
   m->corr.loa = f[j++];
   m->corr.lob = f[j++];
+#ifdef USE_SATURATION
   m->corr.saturation = f[j++];
+#endif
 
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
@@ -338,7 +349,8 @@ int main(int argc, char *argv[])
   // opts[0]=LM_INIT_MU; opts[1]=1E-7; opts[2]=1E-7; opts[3]=1E-12; // known to go through
   // opts[0]=LM_INIT_MU; opts[1]=1E-7; opts[2]=1E-7; opts[3]=1E-12; // known to go through
   // opts[0]=LM_INIT_MU; opts[1]=1E-7; opts[2]=1E-8; opts[3]=1E-13; // goes through, some nans
-  opts[0]=LM_INIT_MU; opts[1]=1E-8; opts[2]=1E-8; opts[3]=1E-15;
+  // opts[0]=LM_INIT_MU; opts[1]=1E-8; opts[2]=1E-8; opts[3]=1E-15;
+  opts[0]=LM_INIT_MU; opts[1]=1E-8; opts[2]=1E-9; opts[3]=1E-16;
   opts[4]= LM_DIFF_DELTA;
   slevmar_dif(eval_diff, param, sample, param_cnt, sample_cnt, 1000, opts, info, NULL, NULL, &data);
 
