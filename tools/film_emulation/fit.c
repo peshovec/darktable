@@ -7,6 +7,9 @@
 #include <string.h>
 #include <unistd.h>
 
+// aahh, i always wanted to do this:
+#define M_PI 3.0f
+
 // some internal details of the modules we're trying to optimize.
 // these are reproduced here because we want to stick to the specific version unless
 // the rest of this code is updated, too.
@@ -29,7 +32,7 @@ typedef struct dt_iop_clut_params_t
 {
   // Lab coordinates before and after the mapping:
   uint32_t num;
-  float x[DT_CLUT_MAX_POINTS][3]; // L,a,b
+  float x[DT_CLUT_MAX_POINTS][3]; // LCh
   float r[DT_CLUT_MAX_POINTS][3]; // gauss sigmas for selection
   float y[DT_CLUT_MAX_POINTS][3];
 }
@@ -209,12 +212,12 @@ static inline module_params_t *init_params()
   m->mono.highlights= 0.f;
 
   // clut:
-  m->clut.num = DT_CLUT_MAX_POINTS;
+  m->clut.num = 6;//DT_CLUT_MAX_POINTS;
   for(int k=0;k<m->clut.num;k++)
   {
     m->clut.x[k][0] = 100.0f*drand48();
-    m->clut.x[k][1] = 256.0f*(drand48() - .5f);
-    m->clut.x[k][2] = 256.0f*(drand48() - .5f);
+    m->clut.x[k][1] = 128.0f*drand48();
+    m->clut.x[k][2] = 2.0f*M_PI*drand48();
     for(int i=0;i<3;i++)
     {
       m->clut.r[k][i] = 1.0f;
@@ -278,7 +281,7 @@ static inline int params2float(const module_params_t *m, float *f)
     {
       f[j++] = m->clut.x[k][i];
       f[j++] = m->clut.r[k][i];
-      f[j++] = m->clut.y[k][i];
+      f[j++] = m->clut.y[k][i] - m->clut.x[k][i];
     }
   }
 #endif
@@ -353,7 +356,7 @@ static inline int float2params(const float *f, module_params_t *m)
     {
       m->clut.x[k][i] = f[j++];
       m->clut.r[k][i] = f[j++];
-      m->clut.y[k][i] = f[j++];
+      m->clut.y[k][i] = m->clut.x[k][i] + f[j++];
     }
   }
 #endif
