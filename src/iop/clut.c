@@ -24,6 +24,7 @@
 #include "control/control.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
+#include "dtgtk/paint.h"
 #include "gui/presets.h"
 #include "bauhaus/bauhaus.h"
 #include "develop/imageop.h"
@@ -35,6 +36,11 @@
 
 DT_MODULE(1)
 
+// TODO: move to LCh, more intuitive
+// TODO: sometimes the slider doesn't update the dimension, esp. with color picking
+// TODO: need to be able to zoom into the thing
+// TODO: make transition smoother
+
 #define DT_CLUT_INSET 5
 #define DT_CLUT_MAX 40.
 #define DT_CLUT_MAX_POINTS 64
@@ -43,7 +49,8 @@ typedef struct dt_iop_clut_params_t
 {
   // Lab coordinates before and after the mapping:
   uint32_t num;
-  float x[DT_CLUT_MAX_POINTS][4]; // L,a,b,radius
+  float x[DT_CLUT_MAX_POINTS][3]; // L,a,b
+  float r[DT_CLUT_MAX_POINTS][3]; // gauss sigmas for selection
   float y[DT_CLUT_MAX_POINTS][3];
 }
 dt_iop_clut_params_t;
@@ -53,6 +60,7 @@ typedef struct dt_iop_clut_gui_data_t
   GtkDrawingArea *area;
   GtkWidget *slider, *combo;
   int selected;    // selected point
+  int picking;
   int projection;  // projected axis (L,a,b)
   float cursor[3]; // 3d cursor position
   cmsHPROFILE hDisplay;
@@ -111,12 +119,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, void *
     for(int i=0;i<d->num;i++)
     {
       const float dist2 =
-       ((in[0] - d->x[i][0])*(in[0] - d->x[i][0]) +
-        (in[1] - d->x[i][1])*(in[1] - d->x[i][1]) +
-        (in[2] - d->x[i][2])*(in[2] - d->x[i][2])) / (d->x[i][3]*d->x[i][3]);
+       ((in[0] - d->x[i][0])*(in[0] - d->x[i][0])/(d->r[i][0]*d->r[i][0]) +
+        (in[1] - d->x[i][1])*(in[1] - d->x[i][1])/(d->r[i][1]*d->r[i][1]) +
+        (in[2] - d->x[i][2])*(in[2] - d->x[i][2])/(d->r[i][2]*d->r[i][2]));
       const float w = expf(-dist2);//dt_fast_expf(-dist2);
       sumw += w;
-      for(int j=0;j<3;j++) tmp[j] += d->y[i][j] * w;
+      for(int j=0;j<3;j++) tmp[j] += (in[j] + d->y[i][j] - d->x[i][j]) * w;
     }
     // normalize
     for(int j=0;j<3;j++) out[j] = tmp[j] / sumw;
@@ -178,7 +186,7 @@ void init(dt_iop_module_t *module)
   module->params = malloc(sizeof(dt_iop_clut_params_t));
   module->default_params = malloc(sizeof(dt_iop_clut_params_t));
   module->default_enabled = 0;
-  module->priority = 684; // module order created by iop_dependencies.py, do not edit!
+  module->priority = 340; // module order created by iop_dependencies.py, do not edit!
   module->params_size = sizeof(dt_iop_clut_params_t);
   module->gui_data = NULL;
   dt_iop_clut_params_t tmp;
@@ -196,6 +204,7 @@ void cleanup(dt_iop_module_t *module)
 }
 
 static void slider_callback (GtkWidget *slider, gpointer user_data);
+static void pick_toggled (GtkWidget *w, dt_iop_module_t *self);
 static void combo_callback (GtkWidget *w, gpointer user_data);
 static gboolean dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data);
 static gboolean dt_iop_clut_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data);
@@ -209,6 +218,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_iop_clut_gui_data_t *g = (dt_iop_clut_gui_data_t *)self->gui_data;
 
   g->selected = -1;
+  g->picking = 0;
   g->projection = 0;
   g->cursor[0] = 50.0f;
   g->cursor[1] = 0.0f;
@@ -253,19 +263,21 @@ void gui_init(struct dt_iop_module_t *self)
 
   // TODO: use xform to get display profile values of those colors:
   g->slider = dt_bauhaus_slider_new_with_range_and_feedback(self, 0.0f, 1.0f, 0.01f, 0.0f, 2, 0);
-  dt_bauhaus_widget_set_label(g->slider, NULL, _("brightness"));
+  dt_bauhaus_widget_set_quad_paint(g->slider, dtgtk_cairo_paint_colorpicker, 0);
+  dt_bauhaus_widget_set_label(g->slider, NULL, _("L"));
   dt_bauhaus_slider_set_stop(g->slider, 0., 0.0f, 0.0f, 0.0f);
   dt_bauhaus_slider_set_stop(g->slider, 1., 1.0f, 1.0f, 0.0f);
-  g_object_set(G_OBJECT(g->slider), "tooltip-text", _("select brightness"), (char *)NULL);
+  g_object_set(G_OBJECT(g->slider), "tooltip-text", _("select 3rd coordinate"), (char *)NULL);
   g_signal_connect (G_OBJECT (g->slider), "value-changed",
                     G_CALLBACK (slider_callback), self);
+  g_signal_connect (G_OBJECT (g->slider), "quad-pressed", G_CALLBACK (pick_toggled), self);
   gtk_box_pack_start(GTK_BOX(self->widget), g->slider, TRUE, TRUE, 0);
 
   g->combo = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->combo, NULL, _("projection"));
   dt_bauhaus_combobox_add(g->combo, _("a/b"));
-  dt_bauhaus_combobox_add(g->combo, _("L/b"));
-  dt_bauhaus_combobox_add(g->combo, _("L/a"));
+  dt_bauhaus_combobox_add(g->combo, _("b/L"));
+  dt_bauhaus_combobox_add(g->combo, _("a/L"));
   dt_bauhaus_combobox_set(g->combo, 0);
   g_object_set(G_OBJECT(g->combo), "tooltip-text", _("select projection of Lab cube"), (char *)NULL);
   g_signal_connect (G_OBJECT (g->combo), "value-changed",
@@ -314,6 +326,25 @@ static void combo_callback (GtkWidget *w, gpointer user_data)
   gtk_widget_queue_draw(self->widget);
 }
 
+static void pick_toggled (GtkWidget *w, dt_iop_module_t *self)
+{
+  dt_iop_clut_gui_data_t *g = (dt_iop_clut_gui_data_t *)self->gui_data;
+
+  g->picking = 1-g->picking;
+
+  self->request_color_pick = g->picking;
+  if(self->request_color_pick)
+  {
+    dt_lib_colorpicker_set_point(darktable.lib, 0.5, 0.5);
+    dt_dev_reprocess_all(self->dev);
+  }
+  else
+    dt_control_queue_redraw();
+
+  if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+  dt_iop_request_focus(self);
+}
+
 static void slider_callback (GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -332,6 +363,30 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
   dt_iop_clut_gui_data_t *g = (dt_iop_clut_gui_data_t *)self->gui_data;
   dt_iop_clut_params_t *p  = (dt_iop_clut_params_t *)self->params;
 
+  int ci, cj;
+  const float scale[3] = {100.0f, 256.0f, 256.0f};
+  // const float offset[3] = {0., 128., 128.};
+  if(g->projection == 0)
+  { // a/b
+    ci = 1; cj = 2;
+  }
+  else if(g->projection == 1)
+  { // b/L
+    ci = 2; cj = 0;
+  }
+  else
+  { // a/L
+    ci = 1; cj = 0;
+  }
+
+  int pick = 0;
+  if(!(self->picked_color_max[0] < 0.0f || self->picked_color[0] == 0.0f))
+  {
+    pick = 1;
+    memcpy(g->cursor, self->picked_color, sizeof(float)*3);
+    // dt_bauhaus_slider_set(g->slider, (g->cursor[g->projection]+offset[g->projection])/scale[g->projection]);
+  }
+
   const int inset = DT_CLUT_INSET;
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
@@ -349,22 +404,7 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
   cairo_translate(cr, 0, height);
   cairo_scale(cr, 1., -1.);
   const int cells = 8;
-
-  int ci, cj;
-  const float scale[3] = {100.0f, 256.0f, 256.0f};
   double rgb[3] = {0.5, 0.5, 0.5};
-  if(g->projection == 0)
-  { // a/b
-    ci = 1; cj = 2;
-  }
-  else if(g->projection == 1)
-  { // b/L
-    ci = 2; cj = 0;
-  }
-  else
-  { // a/L
-    ci = 0; cj = 1;
-  }
 
   for(int j=0; j<cells; j++) for(int i=0; i<cells; i++)
     {
@@ -398,11 +438,11 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
     else
       cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], 1.0-fabsf(p->x[k][g->projection]-g->cursor[g->projection])/scale[g->projection]);
 
-    const float radius = p->x[k][3];
+    const float radius = 5.0f*(p->r[k][ci] + p->r[k][cj]);
     cairo_arc(cr, loa, lob, radius, 0, 2.*M_PI);
     cairo_fill_preserve(cr);
     if(g->selected == 2*k)
-      cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);
+      cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
     else
       cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
     cairo_stroke(cr);
@@ -410,15 +450,75 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
     cairo_set_line_width(cr, 2.);
     cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
     const float len = sqrtf((hia-loa)*(hia-loa)+(hib-lob)*(hib-lob));
-    cairo_move_to(cr, loa + radius/len*(hia-loa), lob + radius/len*(hib-lob));
+    if(len > 0.0f)
+      cairo_move_to(cr, loa + radius/len*(hia-loa), lob + radius/len*(hib-lob));
+    else
+      cairo_move_to(cr, loa, lob);
     cairo_line_to(cr, hia, hib);
     cairo_stroke(cr);
 
     if(g->selected == 2*k+1)
-      cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);
+      cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
     else
       cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
     cairo_arc(cr, hia, hib, 3, 0, 2.*M_PI);
+    cairo_stroke(cr);
+  }
+
+  // draw selected
+  {
+    const int k = g->selected/2;
+    float loa, hia, lob, hib;
+    loa = .5f*(width  + width *p->x[k][ci]/scale[ci]);
+    lob = .5f*(height + height*p->x[k][cj]/scale[cj]);
+    hia = .5f*(width  + width *p->y[k][ci]/scale[ci]);
+    hib = .5f*(height + height*p->y[k][cj]/scale[cj]);
+
+    cmsCIELab lab;
+    lab.L = p->x[k][0];
+    lab.a = p->x[k][1];
+    lab.b = p->x[k][2];
+    cmsDoTransform(g->xform, &lab, rgb, 1);
+    if(g->selected == 2*k)
+      cairo_set_source_rgb(cr, rgb[0], rgb[1], rgb[2]);
+    else
+      cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], 1.0-fabsf(p->x[k][g->projection]-g->cursor[g->projection])/scale[g->projection]);
+
+    const float radius = 5.0f*(p->r[k][ci] + p->r[k][cj]);
+    cairo_arc(cr, loa, lob, radius, 0, 2.*M_PI);
+    cairo_fill_preserve(cr);
+    if(g->selected == 2*k)
+      cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    else
+      cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
+    cairo_stroke(cr);
+
+    cairo_set_line_width(cr, 2.);
+    cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
+    const float len = sqrtf((hia-loa)*(hia-loa)+(hib-lob)*(hib-lob));
+    if(len > 0.0f)
+      cairo_move_to(cr, loa + radius/len*(hia-loa), lob + radius/len*(hib-lob));
+    else
+      cairo_move_to(cr, loa, lob);
+    cairo_line_to(cr, hia, hib);
+    cairo_stroke(cr);
+
+    if(g->selected == 2*k+1)
+      cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    else
+      cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
+    cairo_arc(cr, hia, hib, 3, 0, 2.*M_PI);
+    cairo_stroke(cr);
+  }
+
+  // draw color picker spot
+  if(pick)
+  {
+    const float radius = 5;
+    const float a = .5f*(width  + width *g->cursor[ci]/scale[ci]);
+    const float b = .5f*(height + height*g->cursor[cj]/scale[cj]);
+    cairo_arc(cr, a, b, radius, 0, 2.*M_PI);
+    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);
     cairo_stroke(cr);
   }
 
@@ -456,7 +556,7 @@ dt_iop_clut_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer use
   }
   else
   { // a/L
-    ci = 0; cj = 1;
+    ci = 1; cj = 0;
   }
   const float ma = (2.0*mouse_x - width) *scale[ci]/(float)width;
   const float mb = (2.0*mouse_y - height)*scale[cj]/(float)height;
@@ -485,19 +585,19 @@ dt_iop_clut_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer use
     float dist = FLT_MAX;
     for(int k=0;k<p->num;k++)
     {
-      const float _thrs = 5.0f*fmaxf(1.0f, p->x[k][3]);
+      const float _thrs = 35.0/width;
       const float thrs = _thrs*_thrs;
       float Lab[3];
       Lab[g->projection] = g->cursor[g->projection];
       Lab[ci] = ma; Lab[cj] = mb;
       const float distx =
-        (Lab[ci] - p->x[k][ci])*(Lab[ci] - p->x[k][ci])/(scale[ci]*scale[ci])+
-        (Lab[cj] - p->x[k][cj])*(Lab[cj] - p->x[k][cj])/(scale[cj]*scale[cj]);
+        (Lab[ci] - p->x[k][ci])*(Lab[ci] - p->x[k][ci])/(p->r[k][ci]*p->r[k][ci]*scale[ci]*scale[ci])+
+        (Lab[cj] - p->x[k][cj])*(Lab[cj] - p->x[k][cj])/(p->r[k][cj]*p->r[k][cj]*scale[cj]*scale[cj]);
       const float disty =
-        (Lab[ci] - p->y[k][ci])*(Lab[ci] - p->y[k][ci])/(scale[ci]*scale[ci])+
-        (Lab[cj] - p->y[k][cj])*(Lab[cj] - p->y[k][cj])/(scale[cj]*scale[cj]);
-      if(distx < thrs && distx < dist) { g->selected = 2*k; dist = distx;}
+        (Lab[ci] - p->y[k][ci])*(Lab[ci] - p->y[k][ci])/(p->r[k][ci]*p->r[k][ci]*scale[ci]*scale[ci])+
+        (Lab[cj] - p->y[k][cj])*(Lab[cj] - p->y[k][cj])/(p->r[k][cj]*p->r[k][cj]*scale[cj]*scale[cj]);
       if(disty < thrs && disty < dist) { g->selected = 2*k+1; dist = disty;}
+      if(distx < thrs && distx < dist) { g->selected = 2*k; dist = distx;}
     }
   }
   gtk_widget_queue_draw(self->widget);
@@ -528,7 +628,7 @@ dt_iop_clut_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user
   }
   else
   { // a/L
-    ci = 0; cj = 1;
+    ci = 1; cj = 0;
   }
   const float ma = (2.0*mouse_x - width) *scale[ci]/(float)width;
   const float mb = (2.0*mouse_y - height)*scale[cj]/(float)height;
@@ -538,16 +638,18 @@ dt_iop_clut_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user
     if(g->selected >= 0)
     {
       // TODO: not sure this makes sense. rather delete the point.
-      if(g->selected & 1)
-        for(int k=0;k<3;k++) p->y[g->selected/2][k] = p->x[g->selected/2][k];
-      p->x[g->selected/2][3] = 1.0f;
+      // if(g->selected & 1)
+      for(int k=0;k<3;k++) p->y[g->selected/2][k] = p->x[g->selected/2][k];
+      p->r[g->selected/2][0] = 1.0f;
+      p->r[g->selected/2][1] = 1.0f;
+      p->r[g->selected/2][2] = 1.0f;
     }
     else
     { // reset everything
       dt_iop_clut_params_t *d = (dt_iop_clut_params_t *)self->default_params;
       memcpy(p, d, sizeof(*p));
-      dt_dev_add_history_item(darktable.develop, self, TRUE);
     }
+    dt_dev_add_history_item(darktable.develop, self, TRUE);
     g->selected = -1;
     return TRUE;
   }
@@ -556,7 +658,9 @@ dt_iop_clut_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user
     p->x[p->num][g->projection] = g->cursor[g->projection];
     p->x[p->num][ci] = ma;
     p->x[p->num][cj] = mb;
-    p->x[p->num][3] = 1.0f; // radius
+    p->r[p->num][0] = 1.0f; // sigma Lab
+    p->r[p->num][1] = 1.0f;
+    p->r[p->num][2] = 1.0f;
     p->y[p->num][g->projection] = g->cursor[g->projection];
     p->y[p->num][ci] = ma;
     p->y[p->num][cj] = mb;
@@ -596,8 +700,8 @@ dt_iop_clut_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_dat
   dt_iop_clut_params_t *p = (dt_iop_clut_params_t *)self->params;
   if(g->selected < 0) return FALSE;
   const float step = 4.0f/5.0f;
-  if(event->direction == GDK_SCROLL_UP   && p->x[g->selected/2][3] > .1)    p->x[g->selected/2][3] *= step;
-  if(event->direction == GDK_SCROLL_DOWN && p->x[g->selected/2][3] <  64.0) p->x[g->selected/2][3] /= step;
+  if(event->direction == GDK_SCROLL_UP   && p->r[g->selected/2][g->projection] > .01)   p->r[g->selected/2][g->projection] *= step;
+  if(event->direction == GDK_SCROLL_DOWN && p->r[g->selected/2][g->projection] <  64.0) p->r[g->selected/2][g->projection] /= step;
   dt_dev_add_history_item(darktable.develop, self, TRUE);
   gtk_widget_queue_draw(widget);
   return TRUE;

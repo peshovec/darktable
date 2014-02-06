@@ -1,6 +1,6 @@
 PROGS = fit unitylut
 
-CFLAGS = -g -std=c99 -Wall
+CFLAGS = -g -std=c99 -Wall -D_XOPEN_SOURCE
 
 all: $(PROGS)
 

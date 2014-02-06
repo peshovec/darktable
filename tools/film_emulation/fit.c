@@ -14,9 +14,26 @@
 // define this to optimize for monochrome images
 // #define USE_MONOCHROME
 // #define USE_EXPOSURE
+// #define USE_ZONES
 #define USE_AB_CURVES
 // #define USE_SATURATION
+// #define USE_CORR
+#define USE_CLUT
 
+// clut
+// ======================================================================
+static const int clut_version = 1;
+#define DT_CLUT_MAX_POINTS 64
+
+typedef struct dt_iop_clut_params_t
+{
+  // Lab coordinates before and after the mapping:
+  uint32_t num;
+  float x[DT_CLUT_MAX_POINTS][3]; // L,a,b
+  float r[DT_CLUT_MAX_POINTS][3]; // gauss sigmas for selection
+  float y[DT_CLUT_MAX_POINTS][3];
+}
+dt_iop_clut_params_t;
 
 // exposure
 // ======================================================================
@@ -104,6 +121,7 @@ typedef struct module_params_t
   dt_iop_colorzones_params_t zones;
   dt_iop_colorzones_params_t zones1;
   dt_iop_colorzones_params_t zones2;
+  dt_iop_clut_params_t clut;
   dt_iop_monochrome_params_t mono;
 }
 module_params_t;
@@ -190,6 +208,20 @@ static inline module_params_t *init_params()
   m->mono.size = 2.f;
   m->mono.highlights= 0.f;
 
+  // clut:
+  m->clut.num = 10;//DT_CLUT_MAX_POINTS;
+  for(int k=0;k<m->clut.num;k++)
+  {
+    m->clut.x[k][0] = 100.0f*drand48();
+    m->clut.x[k][1] = 256.0f*(drand48() - .5f);
+    m->clut.x[k][2] = 256.0f*(drand48() - .5f);
+    for(int i=0;i<3;i++)
+    {
+      m->clut.r[k][i] = 1.0f;
+      m->clut.y[k][i] = m->clut.x[k][i];
+    }
+  }
+
   return m;
 }
 
@@ -210,6 +242,7 @@ static inline int params2float(const module_params_t *m, float *f)
     for(int k=0;k<9;k++)
       f[j++] = m->curve.tonecurve[i][k].y;
 
+#ifdef USE_CORR
   f[j++] = m->corr.hia;
   f[j++] = m->corr.hib;
   f[j++] = m->corr.loa;
@@ -217,7 +250,9 @@ static inline int params2float(const module_params_t *m, float *f)
 #ifdef USE_SATURATION
   f[j++] = m->corr.saturation;
 #endif
+#endif
 
+#ifdef USE_ZONES
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS-1; k++) // hue is cyclic, one less
       f[j++] = m->zones.equalizer_y[ch][k];
@@ -234,6 +269,19 @@ static inline int params2float(const module_params_t *m, float *f)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
       f[j++] = m->zones2.equalizer_y[ch][k];
   f[j++] = m->zones2.strength;
+#endif
+
+#ifdef USE_CLUT
+  for(int k=0;k<m->clut.num;k++)
+  {
+    for(int i=0;i<3;i++)
+    {
+      f[j++] = m->clut.x[k][i];
+      f[j++] = m->clut.r[k][i];
+      f[j++] = m->clut.y[k][i];
+    }
+  }
+#endif
 
 #ifdef USE_MONOCHROME
   f[j++] = m->mono.a;
@@ -262,6 +310,7 @@ static inline int float2params(const float *f, module_params_t *m)
     for(int k=0;k<9;k++)
       m->curve.tonecurve[i][k].y = f[j++];
 
+#ifdef USE_CORR
   m->corr.hia = f[j++];
   m->corr.hib = f[j++];
   m->corr.loa = f[j++];
@@ -269,7 +318,9 @@ static inline int float2params(const float *f, module_params_t *m)
 #ifdef USE_SATURATION
   m->corr.saturation = f[j++];
 #endif
+#endif
 
+#ifdef USE_ZONES
   for(int ch=0; ch<3; ch++)
   {
     for(int k=0; k<DT_IOP_COLORZONES_BANDS-1; k++)
@@ -293,6 +344,19 @@ static inline int float2params(const float *f, module_params_t *m)
       m->zones2.equalizer_y[ch][k] = f[j++];
   }
   m->zones2.strength = f[j++];
+#endif
+
+#ifdef USE_CLUT
+  for(int k=0;k<m->clut.num;k++)
+  {
+    for(int i=0;i<3;i++)
+    {
+      m->clut.x[k][i] = f[j++];
+      m->clut.r[k][i] = f[j++];
+      m->clut.y[k][i] = f[j++];
+    }
+  }
+#endif
 
 #ifdef USE_MONOCHROME
   m->mono.a = f[j++];
@@ -331,6 +395,7 @@ static inline void write_xmp(module_params_t *m)
 #endif
 
   // write module params
+#if 0
   fprintf(f, "<rdf:li>");
   write_hex(f, (uint8_t *)&m->exp, sizeof(dt_iop_exposure_params_t));
   fprintf(f, "</rdf:li>\n");
@@ -346,12 +411,18 @@ static inline void write_xmp(module_params_t *m)
   fprintf(f, "<rdf:li>");
   write_hex(f, (uint8_t *)&m->zones2, sizeof(dt_iop_colorzones_params_t));
   fprintf(f, "</rdf:li>\n");
+#endif
+  fprintf(f, "<rdf:li>");
+  write_hex(f, (uint8_t *)&m->clut, sizeof(dt_iop_clut_params_t));
+  fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
   write_hex(f, (uint8_t *)&m->curve, sizeof(dt_iop_tonecurve_params_t));
   fprintf(f, "</rdf:li>\n");
+#if 0
   fprintf(f, "<rdf:li>");
   write_hex(f, (uint8_t *)&m->corr, sizeof(dt_iop_colorcorrection_params_t));
   fprintf(f, "</rdf:li>\n");
+#endif
 
   fwrite(template_foot_xmp, template_foot_xmp_len, 1, f);
   fclose(f);
@@ -399,9 +470,9 @@ int main(int argc, char *argv[])
   opt_data_t data;
   data.m = init_params();
 
-  float *param = (float *)malloc(sizeof(float)*200);
+  float *param = (float *)malloc(sizeof(float)*800);
   const int param_cnt = params2float(data.m, param);
-  assert(param_cnt <= 200);
+  assert(param_cnt <= 800);
 
   // load reference output image into sample array:
   FILE *f = fopen("reference.pfm", "rb");
