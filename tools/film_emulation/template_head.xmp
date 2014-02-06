@@ -7,8 +7,8 @@
     xmlns:darktable="http://darktable.sf.net/"
     xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
     xmlns:dc="http://purl.org/dc/elements/1.1/"
-   xmp:Rating="1"
-   xmpMM:DerivedFrom="photograph.jpg"
+   xmp:Rating="2"
+   xmpMM:DerivedFrom="input.pfm"
    darktable:xmp_version="1"
    darktable:raw_params="0"
    darktable:auto_presets_applied="1">
@@ -39,10 +39,11 @@
    <darktable:history_modversion>
     <rdf:Seq>
      <rdf:li>2</rdf:li>
-     <rdf:li>1</rdf:li>
-     <rdf:li>4</rdf:li>
-     <rdf:li>3</rdf:li>
      <rdf:li>2</rdf:li>
+     <rdf:li>3</rdf:li>
+     <rdf:li>3</rdf:li>
+     <rdf:li>4</rdf:li>
+     <rdf:li>1</rdf:li>
     </rdf:Seq>
    </darktable:history_modversion>
    <darktable:history_enabled>
@@ -52,15 +53,17 @@
      <rdf:li>1</rdf:li>
      <rdf:li>1</rdf:li>
      <rdf:li>1</rdf:li>
+     <rdf:li>0</rdf:li>
     </rdf:Seq>
    </darktable:history_enabled>
    <darktable:history_operation>
     <rdf:Seq>
      <rdf:li>exposure</rdf:li>
-     <rdf:li>colorcorrection</rdf:li>
-     <rdf:li>tonecurve</rdf:li>
-     <rdf:li>colorzones</rdf:li>
      <rdf:li>monochrome</rdf:li>
+     <rdf:li>colorzones</rdf:li>
+     <rdf:li>colorzones</rdf:li>
+     <rdf:li>tonecurve</rdf:li>
+     <rdf:li>colorcorrection</rdf:li>
     </rdf:Seq>
    </darktable:history_operation>
    <darktable:history_params>

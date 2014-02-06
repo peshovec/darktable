@@ -7,8 +7,8 @@
     xmlns:darktable="http://darktable.sf.net/"
     xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
     xmlns:dc="http://purl.org/dc/elements/1.1/"
-   xmp:Rating="1"
-   xmpMM:DerivedFrom="photograph.jpg"
+   xmp:Rating="2"
+   xmpMM:DerivedFrom="input.pfm"
    darktable:xmp_version="1"
    darktable:raw_params="0"
    darktable:auto_presets_applied="1">
@@ -39,41 +39,46 @@
    <darktable:history_modversion>
     <rdf:Seq>
      <rdf:li>2</rdf:li>
-     <rdf:li>1</rdf:li>
-     <rdf:li>4</rdf:li>
-     <rdf:li>3</rdf:li>
      <rdf:li>2</rdf:li>
+     <rdf:li>3</rdf:li>
+     <rdf:li>3</rdf:li>
+     <rdf:li>4</rdf:li>
+     <rdf:li>1</rdf:li>
     </rdf:Seq>
    </darktable:history_modversion>
    <darktable:history_enabled>
     <rdf:Seq>
      <rdf:li>1</rdf:li>
+     <rdf:li>0</rdf:li>
      <rdf:li>1</rdf:li>
      <rdf:li>1</rdf:li>
      <rdf:li>1</rdf:li>
-     <rdf:li>1</rdf:li>
+     <rdf:li>0</rdf:li>
     </rdf:Seq>
    </darktable:history_enabled>
    <darktable:history_operation>
     <rdf:Seq>
      <rdf:li>exposure</rdf:li>
-     <rdf:li>colorcorrection</rdf:li>
-     <rdf:li>tonecurve</rdf:li>
-     <rdf:li>colorzones</rdf:li>
      <rdf:li>monochrome</rdf:li>
+     <rdf:li>colorzones</rdf:li>
+     <rdf:li>colorzones</rdf:li>
+     <rdf:li>tonecurve</rdf:li>
+     <rdf:li>colorcorrection</rdf:li>
     </rdf:Seq>
    </darktable:history_operation>
    <darktable:history_params>
     <rdf:Seq>
-     <rdf:li>PARAMS_EXPOSURE</rdf:li>
-     <rdf:li>PARAMS_COLORCORRECTION</rdf:li>
-     <rdf:li>PARAMS_TONECURVE</rdf:li>
-     <rdf:li>PARAMS_COLORZONES</rdf:li>
-     <rdf:li>PARAMS_MONOCHROME</rdf:li>
+     <rdf:li>00000000000000000000803f</rdf:li>
+     <rdf:li>00000000000000000000004000000000</rdf:li>
+     <rdf:li>gz03eJxjYIAAVU8hO1XPSXbbc28DaSH7vNtm9ttzo+0ZGBrsqSAPxsxAvOM7o/35k3z225gZ7NNymeyFoXIgvOP/fzs9gWd2HaU9dscdHtmpLmaw50SSx4MZADqnLpU=</rdf:li>
+     <rdf:li>gz02eJxjYoAAVU8hO1XPSXbbc28DaSH7vNtm9ttzo+0ZGBrsKZUvr2e0v7rvtV0tEM90eWPX/v+xXYLIS7u2U7vtQHLLLfTs56Qr2TN37berucJkX1KmZX9EVN++edp1O5BcaBK3/R/Lu3aL2FnsufN+2604/cvu43cW+7mXv9mB5ED2AwCz+kYD</rdf:li>
+     <rdf:li>gz03eJxjYGBg6D50cVf/oa82VfrPbGbNnGnLpDndFihs5/aY046BocHu4PQzQPqAnex2JXuguP0Pd38g7WBvvK0USDfYa/6pB4nTFBgbb7YDYVuu63YTeK7bAd1r97T3kx3IPefm/bHbIcdq7/qR2f5hlYj9vSfS9mlpavZ3GKzA7osGYnq4b5MtxH2WEqfB7lto9h3svp9/GezlN3PZR/XLgN0Xs0gd7D7hCWpg9+nT0H2cSJgJCcMAIxADAJ6hRuQ=</rdf:li>
+     <rdf:li>f22f903ddace3a3e90e8893e5069c13e0000803f</rdf:li>
     </rdf:Seq>
    </darktable:history_params>
    <darktable:blendop_params>
     <rdf:Seq>
+     <rdf:li>gz12eJxjYGBgkGAAgRNODESDBnsIHll8ANNSGQM=</rdf:li>
      <rdf:li>gz12eJxjYGBgkGAAgRNODESDBnsIHll8ANNSGQM=</rdf:li>
      <rdf:li>gz12eJxjYGBgkGAAgRNODESDBnsIHll8ANNSGQM=</rdf:li>
      <rdf:li>gz12eJxjYGBgkGAAgRNODESDBnsIHll8ANNSGQM=</rdf:li>
@@ -88,6 +93,7 @@
      <rdf:li>7</rdf:li>
      <rdf:li>7</rdf:li>
      <rdf:li>7</rdf:li>
+     <rdf:li>7</rdf:li>
     </rdf:Seq>
    </darktable:blendop_version>
    <darktable:multi_priority>
@@ -95,32 +101,24 @@
      <rdf:li>0</rdf:li>
      <rdf:li>0</rdf:li>
      <rdf:li>0</rdf:li>
+     <rdf:li>1</rdf:li>
      <rdf:li>0</rdf:li>
      <rdf:li>0</rdf:li>
     </rdf:Seq>
    </darktable:multi_priority>
    <darktable:multi_name>
     <rdf:Seq>
-     <rdf:li/>
-     <rdf:li/>
-     <rdf:li/>
-     <rdf:li/>
-     <rdf:li/>
+     <rdf:li> </rdf:li>
+     <rdf:li> </rdf:li>
+     <rdf:li>1</rdf:li>
+     <rdf:li> </rdf:li>
+     <rdf:li> </rdf:li>
+     <rdf:li> </rdf:li>
     </rdf:Seq>
    </darktable:multi_name>
    <lr:hierarchicalSubject>
     <rdf:Seq/>
    </lr:hierarchicalSubject>
-   <dc:creator>
-    <rdf:Seq>
-     <rdf:li>unknown</rdf:li>
-    </rdf:Seq>
-   </dc:creator>
-   <dc:description>
-    <rdf:Alt>
-     <rdf:li xml:lang="x-default">Developed using Darktable 0.5+git</rdf:li>
-    </rdf:Alt>
-   </dc:description>
    <dc:subject>
     <rdf:Seq/>
    </dc:subject>
