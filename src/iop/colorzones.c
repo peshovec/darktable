@@ -236,27 +236,27 @@ process (struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, void *i, v
       case DT_IOP_COLORZONES_L:
         select = fminf(1.0, in[0]/100.0);
         lut0 = lookup(d->lut[0], select);
-        lut1 = lookup(d->lut[0], select);
-        lut2 = lookup(d->lut[0], select);
+        lut1 = lookup(d->lut[1], select);
+        lut2 = lookup(d->lut[2], select);
         break;
       case DT_IOP_COLORZONES_C:
         select = fminf(1.0, C/128.0);
         lut0 = lookup(d->lut[0], select);
-        lut1 = lookup(d->lut[0], select);
-        lut2 = lookup(d->lut[0], select);
+        lut1 = lookup(d->lut[1], select);
+        lut2 = lookup(d->lut[2], select);
         break;
       default:
       case DT_IOP_COLORZONES_h:
         select = h;
         lut0 = lookup_wrap(d->lut[0], select);
-        lut1 = lookup_wrap(d->lut[0], select);
-        lut2 = lookup_wrap(d->lut[0], select);
+        lut1 = lookup_wrap(d->lut[1], select);
+        lut2 = lookup_wrap(d->lut[2], select);
         // blend = powf(1.0f - C/128.0f, 2.0f);
         break;
     }
     // const float Lm =       (blend*.5f + (1.0f-blend)*lookup(d->lut[0], select)) - .5f;
     // const float hm =       (blend*.5f + (1.0f-blend)*lookup(d->lut[2], select)) - .5f;
-    const float blend = fminf(1.0f, 2.0 * C/128.0f);
+    const float blend = 1.0f;// XXX causes stupid discontinuity in color wheel, avoided by: fminf(1.0f, 2.0 * C/128.0f); // making it ineffective.. :(
     const float Lm = blend*(lut0 - .5f);
     const float hm = lut2 - .5f;
     // blend *= blend; // saturation isn't as prone to artifacts:
@@ -367,7 +367,7 @@ void init_pipe (struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
   piece->data = (void *)d;
   for(int ch=0; ch<3; ch++)
   {
-    d->curve[ch] = dt_draw_curve_new(0.0, 1.0, CATMULL_ROM);
+    d->curve[ch] = dt_draw_curve_new(0.0, 1.0, MONOTONE_HERMITE);//CATMULL_ROM);
     (void)dt_draw_curve_add_point(d->curve[ch], default_params->equalizer_x[ch][DT_IOP_COLORZONES_BANDS-2]-1.0, default_params->equalizer_y[ch][DT_IOP_COLORZONES_BANDS-2]);
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
       (void)dt_draw_curve_add_point(d->curve[ch], default_params->equalizer_x[ch][k], default_params->equalizer_y[ch][k]);
@@ -1027,7 +1027,7 @@ void gui_init(struct dt_iop_module_t *self)
 //   c->channel = DT_IOP_COLORZONES_C;
   c->channel = dt_conf_get_int("plugins/darkroom/colorzones/gui_channel");
   int ch = (int)c->channel;
-  c->minmax_curve = dt_draw_curve_new(0.0, 1.0, CATMULL_ROM);
+  c->minmax_curve = dt_draw_curve_new(0.0, 1.0, MONOTONE_HERMITE);//CATMULL_ROM);
   (void)dt_draw_curve_add_point(c->minmax_curve, p->equalizer_x[ch][DT_IOP_COLORZONES_BANDS-2]-1.0, p->equalizer_y[ch][DT_IOP_COLORZONES_BANDS-2]);
   for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++) (void)dt_draw_curve_add_point(c->minmax_curve, p->equalizer_x[ch][k], p->equalizer_y[ch][k]);
   (void)dt_draw_curve_add_point(c->minmax_curve, p->equalizer_x[ch][1]+1.0, p->equalizer_y[ch][1]);
