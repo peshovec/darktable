@@ -209,7 +209,7 @@ static inline module_params_t *init_params()
   m->mono.highlights= 0.f;
 
   // clut:
-  m->clut.num = 10;//DT_CLUT_MAX_POINTS;
+  m->clut.num = DT_CLUT_MAX_POINTS;
   for(int k=0;k<m->clut.num;k++)
   {
     m->clut.x[k][0] = 100.0f*drand48();

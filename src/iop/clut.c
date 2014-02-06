@@ -36,7 +36,6 @@
 
 DT_MODULE(1)
 
-// TODO: move to LCh, more intuitive
 // TODO: sometimes the slider doesn't update the dimension, esp. with color picking
 // TODO: need to be able to zoom into the thing
 // TODO: make transition smoother
@@ -49,7 +48,7 @@ typedef struct dt_iop_clut_params_t
 {
   // Lab coordinates before and after the mapping:
   uint32_t num;
-  float x[DT_CLUT_MAX_POINTS][3]; // L,a,b
+  float x[DT_CLUT_MAX_POINTS][3]; // LCh
   float r[DT_CLUT_MAX_POINTS][3]; // gauss sigmas for selection
   float y[DT_CLUT_MAX_POINTS][3];
 }
@@ -113,21 +112,33 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, void *
     float *in  = (float *)i + 4*k;
     float *out = (float *)o + 4*k;
     // look up displacement field and update color!
-    const float w0 = 1e-8f;
+    const float w0 = 1e-9f;
     float sumw = w0;
-    float tmp[3] = {w0*in[0], w0*in[1], w0*in[2]};
+    const float inL = in[0];
+    const float inC = sqrtf(in[1]*in[1] + in[2]*in[2]);
+    const float inh = atan2f(in[2], in[1]);
+    float LCh[3] = {w0*inL, w0*inC, w0*inh};
     for(int i=0;i<d->num;i++)
     {
       const float dist2 =
-       ((in[0] - d->x[i][0])*(in[0] - d->x[i][0])/(d->r[i][0]*d->r[i][0]) +
-        (in[1] - d->x[i][1])*(in[1] - d->x[i][1])/(d->r[i][1]*d->r[i][1]) +
-        (in[2] - d->x[i][2])*(in[2] - d->x[i][2])/(d->r[i][2]*d->r[i][2]));
+       ((inL - d->x[i][0])*(inL - d->x[i][0])/(d->r[i][0]*d->r[i][0]) +
+        (inC - d->x[i][1])*(inC - d->x[i][1])/(d->r[i][1]*d->r[i][1]) +
+        // TODO: modulo!
+        (inh - d->x[i][2])*(inh - d->x[i][2])/(d->r[i][2]*d->r[i][2]));
       const float w = expf(-dist2);//dt_fast_expf(-dist2);
       sumw += w;
-      for(int j=0;j<3;j++) tmp[j] += (in[j] + d->y[i][j] - d->x[i][j]) * w;
+      LCh[0] += (inL + d->y[i][0] - d->x[i][0]) * w;
+      LCh[1] += (inC + d->y[i][1] - d->x[i][1]) * w;
+      // TODO: modulo!
+      LCh[2] += (inh + d->y[i][2] - d->x[i][2]) * w;
     }
     // normalize
-    for(int j=0;j<3;j++) out[j] = tmp[j] / sumw;
+    for(int j=0;j<3;j++) LCh[j] /= sumw;
+    const float outa = cosf(LCh[2])*LCh[1];
+    const float outb = sinf(LCh[2])*LCh[1];
+    out[0] = LCh[0];
+    out[1] = outa;
+    out[2] = outb;
   }
 }
 
@@ -275,11 +286,11 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->combo = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->combo, NULL, _("projection"));
-  dt_bauhaus_combobox_add(g->combo, _("a/b"));
-  dt_bauhaus_combobox_add(g->combo, _("b/L"));
-  dt_bauhaus_combobox_add(g->combo, _("a/L"));
+  dt_bauhaus_combobox_add(g->combo, _("saturation vs. hue"));
+  dt_bauhaus_combobox_add(g->combo, _("L vs. hue"));
+  dt_bauhaus_combobox_add(g->combo, _("L vs. saturation"));
   dt_bauhaus_combobox_set(g->combo, 0);
-  g_object_set(G_OBJECT(g->combo), "tooltip-text", _("select projection of Lab cube"), (char *)NULL);
+  g_object_set(G_OBJECT(g->combo), "tooltip-text", _("select projection of LCh cube"), (char *)NULL);
   g_signal_connect (G_OBJECT (g->combo), "value-changed",
                     G_CALLBACK (combo_callback), self);
   gtk_box_pack_start(GTK_BOX(self->widget), g->combo, TRUE, TRUE, 0);
@@ -307,19 +318,20 @@ static void combo_callback (GtkWidget *w, gpointer user_data)
   {
     dt_bauhaus_slider_set_stop(g->slider, 0., 0.0f, 0.0f, 0.0f);
     dt_bauhaus_slider_set_stop(g->slider, 1., 1.0f, 1.0f, 0.0f);
-    dt_bauhaus_widget_set_label(g->slider, 0, _("L"));
+    dt_bauhaus_widget_set_label(g->slider, 0, _("brightness"));
   }
   else if(val == 1)
   {
+    // TODO: make these stops look reasonable!
     dt_bauhaus_slider_set_stop(g->slider, 0., 0.0f, 1.0f, 0.0f);
     dt_bauhaus_slider_set_stop(g->slider, 1., 1.0f, 0.0f, 1.0f);
-    dt_bauhaus_widget_set_label(g->slider, 0, _("a"));
+    dt_bauhaus_widget_set_label(g->slider, 0, _("saturation"));
   }
   else
   {
     dt_bauhaus_slider_set_stop(g->slider, 0., 0.0f, 0.0f, 1.0f);
     dt_bauhaus_slider_set_stop(g->slider, 1., 1.0f, 1.0f, 0.0f);
-    dt_bauhaus_widget_set_label(g->slider, 0, _("b"));
+    dt_bauhaus_widget_set_label(g->slider, 0, _("hue"));
   }
   dt_bauhaus_slider_set(g->slider, g->cursor[g->projection]);
 
@@ -351,7 +363,8 @@ static void slider_callback (GtkWidget *slider, gpointer user_data)
   dt_iop_clut_gui_data_t *g = (dt_iop_clut_gui_data_t *)self->gui_data;
   float val = dt_bauhaus_slider_get(slider);
   if(g->projection == 0) val *= 100.0f;
-  else val = (val-.5)*256.0;
+  else if(g->projection == 1) val *= 128.0f;
+  else if(g->projection == 2) val *= 2.0f*M_PI;
   g->cursor[g->projection] = val;
   gtk_widget_queue_draw(self->widget);
 }
@@ -364,18 +377,17 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
   dt_iop_clut_params_t *p  = (dt_iop_clut_params_t *)self->params;
 
   int ci, cj;
-  const float scale[3] = {100.0f, 256.0f, 256.0f};
-  // const float offset[3] = {0., 128., 128.};
+  const float scale[3] = {100.0f, 128.0f, 2.0f*M_PI};
   if(g->projection == 0)
-  { // a/b
-    ci = 1; cj = 2;
+  { // C/h
+    ci = 2; cj = 1;
   }
   else if(g->projection == 1)
-  { // b/L
+  { // L/h
     ci = 2; cj = 0;
   }
   else
-  { // a/L
+  { // L/C
     ci = 1; cj = 0;
   }
 
@@ -383,7 +395,10 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
   if(!(self->picked_color_max[0] < 0.0f || self->picked_color[0] == 0.0f))
   {
     pick = 1;
-    memcpy(g->cursor, self->picked_color, sizeof(float)*3);
+    const float *c = self->picked_color;
+    g->cursor[0] = c[0];
+    g->cursor[1] = sqrtf(c[1]*c[1] + c[2]*c[2]);
+    g->cursor[2] = atan2f(c[2], c[1]);
     // dt_bauhaus_slider_set(g->slider, (g->cursor[g->projection]+offset[g->projection])/scale[g->projection]);
   }
 
@@ -408,76 +423,35 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
 
   for(int j=0; j<cells; j++) for(int i=0; i<cells; i++)
     {
-      double Lab[3] = {0.0f};
-      Lab[g->projection] = g->cursor[g->projection];
-      Lab[ci] = ((i+.5f)/cells-0.5f) * scale[ci];
-      Lab[cj] = ((j+.5f)/cells-0.5f) * scale[cj];
+      double LCh[3] = {0.0f};
+      LCh[g->projection] = g->cursor[g->projection];
+      LCh[ci] = (i+.5f)/cells * scale[ci];
+      LCh[cj] = (j+.5f)/cells * scale[cj];
       cmsCIELab lab;
-      lab.L = Lab[0]; lab.a = Lab[1]; lab.b = Lab[2];
+      lab.L = LCh[0]; lab.a = LCh[1]*cosf(LCh[2]); lab.b = LCh[1]*sinf(LCh[2]);
       cmsDoTransform(g->xform, &lab, rgb, 1);
       cairo_set_source_rgb (cr, rgb[0], rgb[1], rgb[2]);
       cairo_rectangle(cr, width*i/(float)cells, height*j/(float)cells, width/(float)cells-1, height/(float)cells-1);
       cairo_fill(cr);
     }
 
-  for(int k=0;k<p->num;k++)
+  for(int kk=0;kk<=p->num;kk++)
   {
+    // selected last:
+    int k = kk;
+    if(kk == g->selected/2) continue;
+    if(kk == p->num) k = g->selected/2;
+
     float loa, hia, lob, hib;
-    loa = .5f*(width  + width *p->x[k][ci]/scale[ci]);
-    lob = .5f*(height + height*p->x[k][cj]/scale[cj]);
-    hia = .5f*(width  + width *p->y[k][ci]/scale[ci]);
-    hib = .5f*(height + height*p->y[k][cj]/scale[cj]);
+    loa = width *p->x[k][ci]/scale[ci];
+    lob = height*p->x[k][cj]/scale[cj];
+    hia = width *p->y[k][ci]/scale[ci];
+    hib = height*p->y[k][cj]/scale[cj];
 
     cmsCIELab lab;
     lab.L = p->x[k][0];
-    lab.a = p->x[k][1];
-    lab.b = p->x[k][2];
-    cmsDoTransform(g->xform, &lab, rgb, 1);
-    if(g->selected == 2*k)
-      cairo_set_source_rgb(cr, rgb[0], rgb[1], rgb[2]);
-    else
-      cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], 1.0-fabsf(p->x[k][g->projection]-g->cursor[g->projection])/scale[g->projection]);
-
-    const float radius = 5.0f*(p->r[k][ci] + p->r[k][cj]);
-    cairo_arc(cr, loa, lob, radius, 0, 2.*M_PI);
-    cairo_fill_preserve(cr);
-    if(g->selected == 2*k)
-      cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    else
-      cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
-    cairo_stroke(cr);
-
-    cairo_set_line_width(cr, 2.);
-    cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
-    const float len = sqrtf((hia-loa)*(hia-loa)+(hib-lob)*(hib-lob));
-    if(len > 0.0f)
-      cairo_move_to(cr, loa + radius/len*(hia-loa), lob + radius/len*(hib-lob));
-    else
-      cairo_move_to(cr, loa, lob);
-    cairo_line_to(cr, hia, hib);
-    cairo_stroke(cr);
-
-    if(g->selected == 2*k+1)
-      cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    else
-      cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
-    cairo_arc(cr, hia, hib, 3, 0, 2.*M_PI);
-    cairo_stroke(cr);
-  }
-
-  // draw selected
-  {
-    const int k = g->selected/2;
-    float loa, hia, lob, hib;
-    loa = .5f*(width  + width *p->x[k][ci]/scale[ci]);
-    lob = .5f*(height + height*p->x[k][cj]/scale[cj]);
-    hia = .5f*(width  + width *p->y[k][ci]/scale[ci]);
-    hib = .5f*(height + height*p->y[k][cj]/scale[cj]);
-
-    cmsCIELab lab;
-    lab.L = p->x[k][0];
-    lab.a = p->x[k][1];
-    lab.b = p->x[k][2];
+    lab.a = p->x[k][1] * cosf(p->x[k][2]);
+    lab.b = p->x[k][1] * sinf(p->x[k][2]);
     cmsDoTransform(g->xform, &lab, rgb, 1);
     if(g->selected == 2*k)
       cairo_set_source_rgb(cr, rgb[0], rgb[1], rgb[2]);
@@ -515,8 +489,8 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
   if(pick)
   {
     const float radius = 5;
-    const float a = .5f*(width  + width *g->cursor[ci]/scale[ci]);
-    const float b = .5f*(height + height*g->cursor[cj]/scale[cj]);
+    const float a = width *g->cursor[ci]/scale[ci];
+    const float b = height*g->cursor[cj]/scale[cj];
     cairo_arc(cr, a, b, radius, 0, 2.*M_PI);
     cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);
     cairo_stroke(cr);
@@ -544,38 +518,42 @@ dt_iop_clut_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer use
   const float mouse_x = CLAMP(event->x - inset, 0, width);
   const float mouse_y = CLAMP(height - 1 - event->y + inset, 0, height);
   int ci, cj;
-  const float scale[3] = {100.0f, 256.0f, 256.0f};
-  const float offset[3] = {0.0f, 128.0f, 128.0f};
+  const float scale[3] = {100.0f, 128.0f, 2.0f*M_PI};
+  float mi, mj;
   if(g->projection == 0)
-  { // a/b
-    ci = 1; cj = 2;
+  { // C/h
+    ci = 2; cj = 1;
+    mi = scale[2] * mouse_x/(float)width;
+    mj = scale[1] * mouse_y/(float)height;
   }
-  else if(g->projection == 1)
-  { // b/L
-    ci = 2; cj = 0;
+  else if(g->projection == 2)
+  { // C/L
+    ci = 1; cj = 0;
+    mi = scale[1] * mouse_x/(float)width;
+    mj = scale[0] * mouse_y/(float)height;
   }
   else
-  { // a/L
-    ci = 1; cj = 0;
+  { // h/L
+    ci = 2; cj = 0;
+    mi = scale[2] * mouse_x/(float)width;
+    mj = scale[0] * mouse_y/(float)height;
   }
-  const float ma = (2.0*mouse_x - width) *scale[ci]/(float)width;
-  const float mb = (2.0*mouse_y - height)*scale[cj]/(float)height;
   if(event->state & GDK_BUTTON1_MASK)
   {
     if(g->selected >= 0 && !(g->selected & 1))
     {
-      p->x[g->selected/2][ci] = ma;
-      p->x[g->selected/2][cj] = mb;
+      p->x[g->selected/2][ci] = mi;
+      p->x[g->selected/2][cj] = mj;
       memcpy(g->cursor, p->x[g->selected/2], sizeof(float)*3);
-      dt_bauhaus_slider_set(g->slider, (g->cursor[g->projection]+offset[g->projection])/scale[g->projection]);
+      dt_bauhaus_slider_set(g->slider, g->cursor[g->projection]/scale[g->projection]);
       dt_dev_add_history_item(darktable.develop, self, TRUE);
     }
     else if(g->selected >= 0)
     {
-      p->y[g->selected/2][ci] = ma;
-      p->y[g->selected/2][cj] = mb;
+      p->y[g->selected/2][ci] = mi;
+      p->y[g->selected/2][cj] = mj;
       memcpy(g->cursor, p->y[g->selected/2], sizeof(float)*3);
-      dt_bauhaus_slider_set(g->slider, (g->cursor[g->projection]+offset[g->projection])/scale[g->projection]);
+      dt_bauhaus_slider_set(g->slider, g->cursor[g->projection]/scale[g->projection]);
       dt_dev_add_history_item(darktable.develop, self, TRUE);
     }
   }
@@ -587,15 +565,15 @@ dt_iop_clut_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer use
     {
       const float _thrs = 35.0/width;
       const float thrs = _thrs*_thrs;
-      float Lab[3];
-      Lab[g->projection] = g->cursor[g->projection];
-      Lab[ci] = ma; Lab[cj] = mb;
+      float LCh[3];
+      LCh[g->projection] = g->cursor[g->projection];
+      LCh[ci] = mi; LCh[cj] = mj;
       const float distx =
-        (Lab[ci] - p->x[k][ci])*(Lab[ci] - p->x[k][ci])/(p->r[k][ci]*p->r[k][ci]*scale[ci]*scale[ci])+
-        (Lab[cj] - p->x[k][cj])*(Lab[cj] - p->x[k][cj])/(p->r[k][cj]*p->r[k][cj]*scale[cj]*scale[cj]);
+        (LCh[ci] - p->x[k][ci])*(LCh[ci] - p->x[k][ci])/(p->r[k][ci]*p->r[k][ci]*scale[ci]*scale[ci])+
+        (LCh[cj] - p->x[k][cj])*(LCh[cj] - p->x[k][cj])/(p->r[k][cj]*p->r[k][cj]*scale[cj]*scale[cj]);
       const float disty =
-        (Lab[ci] - p->y[k][ci])*(Lab[ci] - p->y[k][ci])/(p->r[k][ci]*p->r[k][ci]*scale[ci]*scale[ci])+
-        (Lab[cj] - p->y[k][cj])*(Lab[cj] - p->y[k][cj])/(p->r[k][cj]*p->r[k][cj]*scale[cj]*scale[cj]);
+        (LCh[ci] - p->y[k][ci])*(LCh[ci] - p->y[k][ci])/(p->r[k][ci]*p->r[k][ci]*scale[ci]*scale[ci])+
+        (LCh[cj] - p->y[k][cj])*(LCh[cj] - p->y[k][cj])/(p->r[k][cj]*p->r[k][cj]*scale[cj]*scale[cj]);
       if(disty < thrs && disty < dist) { g->selected = 2*k+1; dist = disty;}
       if(distx < thrs && distx < dist) { g->selected = 2*k; dist = distx;}
     }
@@ -617,21 +595,26 @@ dt_iop_clut_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user
   const float mouse_x = CLAMP(event->x - inset, 0, width);
   const float mouse_y = CLAMP(height - 1 - event->y + inset, 0, height);
   int ci, cj;
-  const float scale[3] = {100.0f, 256.0f, 256.0f};
+  float mi, mj;
+  const float scale[3] = {100.0f, 128.0f, 2.0f*M_PI};
   if(g->projection == 0)
-  { // a/b
-    ci = 1; cj = 2;
+  { // C/h
+    ci = 2; cj = 1;
+    mi = scale[ci] * mouse_x/(float)width;
+    mj = scale[cj] * mouse_y/(float)height;
   }
-  else if(g->projection == 1)
-  { // b/L
-    ci = 2; cj = 0;
+  else if(g->projection == 2)
+  { // C/L
+    ci = 1; cj = 0;
+    mi = scale[ci] * mouse_x/(float)width;
+    mj = scale[cj] * mouse_y/(float)height;
   }
   else
-  { // a/L
-    ci = 1; cj = 0;
+  { // h/L
+    ci = 2; cj = 0;
+    mi = scale[ci] * mouse_x/(float)width;
+    mj = scale[cj] * mouse_y/(float)height;
   }
-  const float ma = (2.0*mouse_x - width) *scale[ci]/(float)width;
-  const float mb = (2.0*mouse_y - height)*scale[cj]/(float)height;
   if(event->button == 1 && event->type == GDK_2BUTTON_PRESS)
   {
     // double click resets:
@@ -656,14 +639,14 @@ dt_iop_clut_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user
   else if((g->selected < 0) && (event->button == 1) && (p->num < DT_CLUT_MAX_POINTS))
   { // add new point
     p->x[p->num][g->projection] = g->cursor[g->projection];
-    p->x[p->num][ci] = ma;
-    p->x[p->num][cj] = mb;
+    p->x[p->num][ci] = mi;
+    p->x[p->num][cj] = mj;
     p->r[p->num][0] = 1.0f; // sigma Lab
     p->r[p->num][1] = 1.0f;
     p->r[p->num][2] = 1.0f;
     p->y[p->num][g->projection] = g->cursor[g->projection];
-    p->y[p->num][ci] = ma;
-    p->y[p->num][cj] = mb;
+    p->y[p->num][ci] = mi;
+    p->y[p->num][cj] = mj;
     p->num++;
     g->selected = 2*p->num;
     dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -673,7 +656,8 @@ dt_iop_clut_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user
   { // delete selected point
     if(p->num > 0 && g->selected >= 0)
     {
-      memmove(p->x[g->selected/2], p->x[p->num-1], sizeof(float)*4);
+      memmove(p->x[g->selected/2], p->x[p->num-1], sizeof(float)*3);
+      memmove(p->r[g->selected/2], p->r[p->num-1], sizeof(float)*3);
       memmove(p->y[g->selected/2], p->y[p->num-1], sizeof(float)*3);
       p->num--;
       g->selected = -1;
