@@ -14,7 +14,7 @@
 // define this to optimize for monochrome images
 // #define USE_MONOCHROME
 // #define USE_EXPOSURE
-// #define USE_AB_CURVES
+#define USE_AB_CURVES
 // #define USE_SATURATION
 
 
@@ -102,6 +102,8 @@ typedef struct module_params_t
   dt_iop_tonecurve_params_t curve;
   dt_iop_colorcorrection_params_t corr;
   dt_iop_colorzones_params_t zones;
+  dt_iop_colorzones_params_t zones1;
+  dt_iop_colorzones_params_t zones2;
   dt_iop_monochrome_params_t mono;
 }
 module_params_t;
@@ -119,16 +121,26 @@ static inline module_params_t *init_params()
   // curve:
   for(int k=0;k<3;k++) m->curve.tonecurve_type[k] = 2; // MONOTONE_HERMITE
   for(int k=0;k<3;k++) m->curve.tonecurve_nodes[k] = 9; // enough i think.
-  for(int i=0;i<3;i++)
-  { // start at identity
+  // start at identity
+  m->curve.tonecurve[0][0].x = m->curve.tonecurve[0][0].y = .0f;
+  m->curve.tonecurve[0][1].x = m->curve.tonecurve[0][1].y = .03f;
+  m->curve.tonecurve[0][2].x = m->curve.tonecurve[0][2].y = .075f;
+  m->curve.tonecurve[0][3].x = m->curve.tonecurve[0][3].y = .125f;
+  m->curve.tonecurve[0][4].x = m->curve.tonecurve[0][4].y = .25f;
+  m->curve.tonecurve[0][5].x = m->curve.tonecurve[0][5].y = .375f;
+  m->curve.tonecurve[0][6].x = m->curve.tonecurve[0][6].y = .5f;
+  m->curve.tonecurve[0][7].x = m->curve.tonecurve[0][7].y = .75f;
+  m->curve.tonecurve[0][8].x = m->curve.tonecurve[0][8].y = 1.0f;
+  for(int i=1;i<3;i++)
+  {
     m->curve.tonecurve[i][0].x = m->curve.tonecurve[i][0].y = .0f;
-    m->curve.tonecurve[i][1].x = m->curve.tonecurve[i][1].y = .03f;
-    m->curve.tonecurve[i][2].x = m->curve.tonecurve[i][2].y = .075f;
-    m->curve.tonecurve[i][3].x = m->curve.tonecurve[i][3].y = .125f;
-    m->curve.tonecurve[i][4].x = m->curve.tonecurve[i][4].y = .25f;
-    m->curve.tonecurve[i][5].x = m->curve.tonecurve[i][5].y = .375f;
-    m->curve.tonecurve[i][6].x = m->curve.tonecurve[i][6].y = .5f;
-    m->curve.tonecurve[i][7].x = m->curve.tonecurve[i][7].y = .75f;
+    m->curve.tonecurve[i][1].x = m->curve.tonecurve[i][1].y = .35f;
+    m->curve.tonecurve[i][2].x = m->curve.tonecurve[i][2].y = .42f;
+    m->curve.tonecurve[i][3].x = m->curve.tonecurve[i][3].y = .48f;
+    m->curve.tonecurve[i][4].x = m->curve.tonecurve[i][4].y = .5f;
+    m->curve.tonecurve[i][5].x = m->curve.tonecurve[i][5].y = .52f;
+    m->curve.tonecurve[i][6].x = m->curve.tonecurve[i][6].y = .58f;
+    m->curve.tonecurve[i][7].x = m->curve.tonecurve[i][7].y = .65f;
     m->curve.tonecurve[i][8].x = m->curve.tonecurve[i][8].y = 1.0f;
   }
 #ifdef USE_AB_CURVES
@@ -137,7 +149,7 @@ static inline module_params_t *init_params()
   m->curve.tonecurve_autoscale_ab = 1;
 #endif
   m->curve.tonecurve_preset = 0;
-  m->curve.tonecurve_unbound_ab = 0;
+  m->curve.tonecurve_unbound_ab = 1;
 
   // color correction
   m->corr.saturation = 1.0f; // the rest is 0
@@ -151,6 +163,26 @@ static inline module_params_t *init_params()
     }
   m->zones.strength = 0.0;
   m->zones.channel = DT_IOP_COLORZONES_h;
+
+  // color zones, second instance:
+  for(int ch=0; ch<3; ch++)
+    for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+    {
+      m->zones1.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
+      m->zones1.equalizer_y[ch][k] = 0.5f;
+    }
+  m->zones1.strength = 0.0;
+  m->zones1.channel = DT_IOP_COLORZONES_L;
+
+  // aaand third:
+  for(int ch=0; ch<3; ch++)
+    for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+    {
+      m->zones2.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
+      m->zones2.equalizer_y[ch][k] = 0.5f;
+    }
+  m->zones2.strength = 0.0;
+  m->zones2.channel = DT_IOP_COLORZONES_C;
 
   // monochrome:
   m->mono.a = 0.f;
@@ -187,11 +219,21 @@ static inline int params2float(const module_params_t *m, float *f)
 #endif
 
   for(int ch=0; ch<3; ch++)
-    for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+    for(int k=0; k<DT_IOP_COLORZONES_BANDS-1; k++) // hue is cyclic, one less
       f[j++] = m->zones.equalizer_y[ch][k];
   f[j++] = m->zones.strength;
   // TODO: shall we mutate this? probably not.
   // f[j++] = m->zones.channel+.5f;
+
+  for(int ch=0; ch<3; ch++)
+    for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+      f[j++] = m->zones1.equalizer_y[ch][k];
+  f[j++] = m->zones1.strength;
+
+  for(int ch=0; ch<3; ch++)
+    for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+      f[j++] = m->zones2.equalizer_y[ch][k];
+  f[j++] = m->zones2.strength;
 
 #ifdef USE_MONOCHROME
   f[j++] = m->mono.a;
@@ -229,11 +271,28 @@ static inline int float2params(const float *f, module_params_t *m)
 #endif
 
   for(int ch=0; ch<3; ch++)
-    for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+  {
+    for(int k=0; k<DT_IOP_COLORZONES_BANDS-1; k++)
       m->zones.equalizer_y[ch][k] = f[j++];
+    m->zones.equalizer_y[ch][DT_IOP_COLORZONES_BANDS-1] = m->zones.equalizer_y[ch][0]; // hue selection is cyclic
+  }
   m->zones.strength = f[j++];
   // TODO: shall we mutate this? probably not.
   // m->zones.channel = (int)roundf(f[j++]);
+
+  for(int ch=0; ch<3; ch++)
+  {
+    for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+      m->zones1.equalizer_y[ch][k] = f[j++];
+  }
+  m->zones1.strength = f[j++];
+
+  for(int ch=0; ch<3; ch++)
+  {
+    for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
+      m->zones2.equalizer_y[ch][k] = f[j++];
+  }
+  m->zones2.strength = f[j++];
 
 #ifdef USE_MONOCHROME
   m->mono.a = f[j++];
@@ -276,16 +335,22 @@ static inline void write_xmp(module_params_t *m)
   write_hex(f, (uint8_t *)&m->exp, sizeof(dt_iop_exposure_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint8_t *)&m->corr, sizeof(dt_iop_colorcorrection_params_t));
-  fprintf(f, "</rdf:li>\n");
-  fprintf(f, "<rdf:li>");
-  write_hex(f, (uint8_t *)&m->curve, sizeof(dt_iop_tonecurve_params_t));
+  write_hex(f, (uint8_t *)&m->mono, sizeof(dt_iop_monochrome_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
   write_hex(f, (uint8_t *)&m->zones, sizeof(dt_iop_colorzones_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint8_t *)&m->mono, sizeof(dt_iop_monochrome_params_t));
+  write_hex(f, (uint8_t *)&m->zones1, sizeof(dt_iop_colorzones_params_t));
+  fprintf(f, "</rdf:li>\n");
+  fprintf(f, "<rdf:li>");
+  write_hex(f, (uint8_t *)&m->zones2, sizeof(dt_iop_colorzones_params_t));
+  fprintf(f, "</rdf:li>\n");
+  fprintf(f, "<rdf:li>");
+  write_hex(f, (uint8_t *)&m->curve, sizeof(dt_iop_tonecurve_params_t));
+  fprintf(f, "</rdf:li>\n");
+  fprintf(f, "<rdf:li>");
+  write_hex(f, (uint8_t *)&m->corr, sizeof(dt_iop_colorcorrection_params_t));
   fprintf(f, "</rdf:li>\n");
 
   fwrite(template_foot_xmp, template_foot_xmp_len, 1, f);
@@ -298,6 +363,16 @@ typedef struct opt_data_t
 }
 opt_data_t;
 
+
+static inline void distort_samples(float *sample, int sample_cnt)
+{
+  const float c = 1.0f;
+  for(int k=0;k<sample_cnt/3;k++)
+  {
+    sample[3*k+0] += c*(sample[3*k+0]-sample[3*k+1]);
+    sample[3*k+2] += c*(sample[3*k+2]-sample[3*k+1]);
+  }
+}
 
 void eval_diff(float *param, float *sample, int param_cnt, int sample_cnt, void *data)
 {
@@ -314,6 +389,7 @@ void eval_diff(float *param, float *sample, int param_cnt, int sample_cnt, void 
   fscanf(f, "PF\n%*d %*d\n%*[^\n]");
   fgetc(f); // \n
   fread(sample, sizeof(float), sample_cnt, f);
+  distort_samples(sample, sample_cnt);
   fclose(f);
 }
 
@@ -323,9 +399,9 @@ int main(int argc, char *argv[])
   opt_data_t data;
   data.m = init_params();
 
-  float *param = (float *)malloc(sizeof(float)*100);
+  float *param = (float *)malloc(sizeof(float)*200);
   const int param_cnt = params2float(data.m, param);
-  assert(param_cnt <= 100);
+  assert(param_cnt <= 200);
 
   // load reference output image into sample array:
   FILE *f = fopen("reference.pfm", "rb");
@@ -341,6 +417,8 @@ int main(int argc, char *argv[])
   float *sample = (float *)malloc(sizeof(float)*sample_cnt);
   fread(sample, sizeof(float), sample_cnt, f);
   fclose(f);
+  // distort samples to make error measure respect colors more:
+  distort_samples(sample, sample_cnt);
 
   fprintf(stdout, "[fit] optimizing %d params over %d samples.\n", param_cnt, sample_cnt);
 
