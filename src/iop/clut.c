@@ -116,13 +116,19 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, void *
     float sumw = w0;
     const float inL = in[0];
     const float inC = sqrtf(in[1]*in[1] + in[2]*in[2]);
-    const float inh = atan2f(in[2], in[1]);
+    float inh = atan2f(in[2], in[1]);
+    if(inh < 0.0f) inh += 2.0f*M_PI;
     float LCh[3] = {w0*inL, w0*inC, w0*inh};
     for(int i=0;i<d->num;i++)
     {
       // compute hue distance modulo 2 pi
       const float disth = inh - d->x[i][2];
-      const float disthm = fminf(fabsf(disth), fminf(fabsf(disth + 2.0f*M_PI), fabsf(disth - 2.0f*M_PI)));
+      float disthm = disth;
+      if(fabsf(disth + 2.0f*M_PI) < fabsf(disthm))
+        disthm = disth + 2.0f*M_PI;
+      if(fabsf(disth - 2.0f*M_PI) < fabsf(disthm))
+        disthm = disth - 2.0f*M_PI;
+
       const float dist2 =
        ((inL - d->x[i][0])*(inL - d->x[i][0])/(100*100*d->r[i][0]*d->r[i][0]) +
         (inC - d->x[i][1])*(inC - d->x[i][1])/(128*128*d->r[i][1]*d->r[i][1]) +
@@ -131,7 +137,10 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, void *
       sumw += w;
       LCh[0] += (inL + d->y[i][0] - d->x[i][0]) * w;
       LCh[1] += (inC + d->y[i][1] - d->x[i][1]) * w;
-      LCh[2] += (d->y[i][2] + disthm) * w;
+      float modh = d->y[i][2] + disthm;
+      if(modh > 2.0f*M_PI) modh -= 2.0f*M_PI;
+      if(modh < 0.0f) modh += 2.0f*M_PI;
+      LCh[2] += modh * w;
     }
     // normalize
     for(int j=0;j<3;j++) LCh[j] /= sumw;
@@ -400,6 +409,7 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
     g->cursor[0] = c[0];
     g->cursor[1] = sqrtf(c[1]*c[1] + c[2]*c[2]);
     g->cursor[2] = atan2f(c[2], c[1]);
+    if(g->cursor[2] < 0.0f) g->cursor[2] += 2.0f * M_PI;
     // dt_bauhaus_slider_set(g->slider, (g->cursor[g->projection]+offset[g->projection])/scale[g->projection]);
   }
 
