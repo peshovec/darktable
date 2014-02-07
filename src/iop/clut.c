@@ -251,7 +251,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), asp, TRUE, TRUE, 0);
   gtk_container_add(GTK_CONTAINER(asp), GTK_WIDGET(g->area));
   gtk_widget_set_size_request(GTK_WIDGET(g->area), 258, 258);
-  g_object_set (GTK_OBJECT(g->area), "tooltip-text", _("click to add new source/destination control point pair, drag to change mapping, (ctrl-)mouse wheel to change radii of influence."), (char *)NULL);
+  g_object_set (GTK_OBJECT(g->area), "tooltip-text", _("click to add new source/destination control point pair, drag to change mapping, (ctrl-)mouse wheel to change radii of influence, right click to remove a pair."), (char *)NULL);
 
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_LEAVE_NOTIFY_MASK);
   g_signal_connect (G_OBJECT (g->area), "expose-event",
@@ -448,10 +448,14 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
 
   for(int kk=0;kk<=p->num;kk++)
   {
-    // selected last:
     int k = kk;
-    if(kk == g->selected/2) continue;
-    if(kk == p->num) k = g->selected/2;
+    if(g->selected >= 0)
+    {
+      // selected last:
+      if(kk == g->selected/2) continue;
+      if(kk == p->num) k = g->selected/2;
+    }
+    else if(kk == p->num) break;
 
     float loa, hia, lob, hib;
     loa = width *p->x[k][ci]/scale[ci];
@@ -477,15 +481,20 @@ dt_iop_clut_expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
     if(g->selected == 2*k)
       cairo_set_source_rgb(cr, rgb[0], rgb[1], rgb[2]);
     else
-      cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], 1.0-fabsf(p->x[k][g->projection]-g->cursor[g->projection])/scale[g->projection]);
+      cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], fminf(0.7f, 1.0-fabsf(p->x[k][g->projection]-g->cursor[g->projection])/scale[g->projection]));
 
     cairo_save(cr);
     cairo_translate(cr, loa, lob);
-    cairo_scale(cr, fmaxf(3.0f, width*p->r[k][ci]), fmaxf(3.0f, height*p->r[k][cj]));
-    cairo_arc(cr, 0.0f, 0.0f, 1.0f, 0, 2.*M_PI);
+    cairo_arc(cr, 0.0f, 0.0f, 8.0f, 0, 2.*M_PI);
+    cairo_fill(cr);
+    if(g->selected >= 0 && g->selected/2 == k)
+    { // only draw large thing in case we're selected
+      cairo_scale(cr, fmaxf(3.0f, width*p->r[k][ci]), fmaxf(3.0f, height*p->r[k][cj]));
+      cairo_arc(cr, 0.0f, 0.0f, 1.0f, 0, 2.*M_PI);
+    }
+    else cairo_arc(cr, 0.0f, 0.0f, 6.0f, 0, 2.*M_PI);
     cairo_restore(cr);
-    cairo_fill_preserve(cr);
-    if(g->selected == 2*k)
+    if(g->selected >= 0 && g->selected == 2*k)
       cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
     else
       cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
