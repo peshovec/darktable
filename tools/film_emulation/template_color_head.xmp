@@ -8,7 +8,7 @@
     xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
     xmlns:dc="http://purl.org/dc/elements/1.1/"
    xmp:Rating="2"
-   xmpMM:DerivedFrom="input.pfm"
+   xmpMM:DerivedFrom="output.pfm"
    darktable:xmp_version="1"
    darktable:raw_params="0"
    darktable:auto_presets_applied="1">
@@ -38,21 +38,13 @@
    </darktable:colorlabels>
    <darktable:history_modversion>
     <rdf:Seq>
-     <rdf:li>1</rdf:li>
+     <rdf:li>3</rdf:li>
+     <rdf:li>3</rdf:li>
+     <rdf:li>3</rdf:li>
      <rdf:li>4</rdf:li>
+     <rdf:li>1</rdf:li>
+     <rdf:li>1</rdf:li>
     </rdf:Seq>
    </darktable:history_modversion>
    <darktable:history_enabled>
-    <rdf:Seq>
-     <rdf:li>1</rdf:li>
-     <rdf:li>1</rdf:li>
-    </rdf:Seq>
-   </darktable:history_enabled>
-   <darktable:history_operation>
-    <rdf:Seq>
-     <rdf:li>clut</rdf:li>
-     <rdf:li>tonecurve</rdf:li>
-    </rdf:Seq>
-   </darktable:history_operation>
-   <darktable:history_params>
     <rdf:Seq>
