@@ -17,12 +17,15 @@
 // define this to optimize for monochrome images
 #define USE_MONOCHROME 0
 #define USE_EXPOSURE 0
-#define USE_ZONES 1
-#define USE_CURVE 1
+#define USE_ZONES_L 1
+#define USE_ZONES_C 1
+#define USE_ZONES_h 0
+#define USE_ZONES_CHANGE_h 0
+#define USE_CURVE 0
 #define USE_AB_CURVES 1
 #define USE_SATURATION 0
-#define USE_CORR 1
-#define USE_CLUT 1
+#define USE_CORR 0
+#define USE_CLUT 0
 
 // clut
 // ======================================================================
@@ -122,9 +125,9 @@ typedef struct module_params_t
   dt_iop_exposure_params_t exp;
   dt_iop_tonecurve_params_t curve;
   dt_iop_colorcorrection_params_t corr;
-  dt_iop_colorzones_params_t zones;
-  dt_iop_colorzones_params_t zones1;
-  dt_iop_colorzones_params_t zones2;
+  dt_iop_colorzones_params_t zones_L;
+  dt_iop_colorzones_params_t zones_C;
+  dt_iop_colorzones_params_t zones_h;
   dt_iop_clut_params_t clut;
   dt_iop_monochrome_params_t mono;
 }
@@ -180,31 +183,31 @@ static inline module_params_t *init_params()
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
     {
-      m->zones.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
-      m->zones.equalizer_y[ch][k] = 0.5f;
+      m->zones_h.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
+      m->zones_h.equalizer_y[ch][k] = 0.5f;
     }
-  m->zones.strength = 0.0;
-  m->zones.channel = DT_IOP_COLORZONES_h;
+  m->zones_h.strength = 0.0;
+  m->zones_h.channel = DT_IOP_COLORZONES_h;
 
   // color zones, second instance:
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
     {
-      m->zones1.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
-      m->zones1.equalizer_y[ch][k] = 0.5f;
+      m->zones_L.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
+      m->zones_L.equalizer_y[ch][k] = 0.5f;
     }
-  m->zones1.strength = 0.0;
-  m->zones1.channel = DT_IOP_COLORZONES_L;
+  m->zones_L.strength = 0.0;
+  m->zones_L.channel = DT_IOP_COLORZONES_L;
 
   // aaand third:
   for(int ch=0; ch<3; ch++)
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
     {
-      m->zones2.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
-      m->zones2.equalizer_y[ch][k] = 0.5f;
+      m->zones_C.equalizer_x[ch][k] = k/(DT_IOP_COLORZONES_BANDS-1.0f);
+      m->zones_C.equalizer_y[ch][k] = 0.5f;
     }
-  m->zones2.strength = 0.0;
-  m->zones2.channel = DT_IOP_COLORZONES_C;
+  m->zones_C.strength = 0.0;
+  m->zones_C.channel = DT_IOP_COLORZONES_C;
 
   // monochrome:
   m->mono.a = 0.f;
@@ -256,23 +259,37 @@ static inline int params2float(const module_params_t *m, float *f)
 #endif
 #endif
 
-#if USE_ZONES==1
+#if USE_ZONES_h==1
+#if USE_ZONES_CHANGE_h==1
   for(int ch=0; ch<3; ch++)
+#else
+  for(int ch=0; ch<2; ch++)
+#endif
     for(int k=0; k<DT_IOP_COLORZONES_BANDS-1; k++) // hue is cyclic, one less
-      f[j++] = m->zones.equalizer_y[ch][k];
-  f[j++] = m->zones.strength;
-  // TODO: shall we mutate this? probably not.
-  // f[j++] = m->zones.channel+.5f;
+      f[j++] = m->zones_h.equalizer_y[ch][k];
+  f[j++] = m->zones_h.strength;
+#endif
 
+#if USE_ZONES_L==1
+#if USE_ZONES_CHANGE_h==1
   for(int ch=0; ch<3; ch++)
+#else
+  for(int ch=0; ch<2; ch++)
+#endif
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
-      f[j++] = m->zones1.equalizer_y[ch][k];
-  f[j++] = m->zones1.strength;
+      f[j++] = m->zones_L.equalizer_y[ch][k];
+  f[j++] = m->zones_L.strength;
+#endif
 
+#if USE_ZONES_C==1
+#if USE_ZONES_CHANGE_h==1
   for(int ch=0; ch<3; ch++)
+#else
+  for(int ch=0; ch<2; ch++)
+#endif
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
-      f[j++] = m->zones2.equalizer_y[ch][k];
-  f[j++] = m->zones2.strength;
+      f[j++] = m->zones_C.equalizer_y[ch][k];
+  f[j++] = m->zones_C.strength;
 #endif
 
 #if USE_CLUT==1
@@ -324,30 +341,44 @@ static inline int float2params(const float *f, module_params_t *m)
 #endif
 #endif
 
-#if USE_ZONES==1
+#if USE_ZONES_h==1
+#if USE_ZONES_CHANGE_h==1
   for(int ch=0; ch<3; ch++)
+#else
+  for(int ch=0; ch<2; ch++)
+#endif
   {
     for(int k=0; k<DT_IOP_COLORZONES_BANDS-1; k++)
-      m->zones.equalizer_y[ch][k] = f[j++];
-    m->zones.equalizer_y[ch][DT_IOP_COLORZONES_BANDS-1] = m->zones.equalizer_y[ch][0]; // hue selection is cyclic
+      m->zones_h.equalizer_y[ch][k] = f[j++];
+    m->zones_h.equalizer_y[ch][DT_IOP_COLORZONES_BANDS-1] = m->zones_h.equalizer_y[ch][0]; // hue selection is cyclic
   }
-  m->zones.strength = f[j++];
-  // TODO: shall we mutate this? probably not.
-  // m->zones.channel = (int)roundf(f[j++]);
+  m->zones_h.strength = f[j++];
+#endif
 
+#if USE_ZONES_L==1
+#if USE_ZONES_CHANGE_h==1
   for(int ch=0; ch<3; ch++)
+#else
+  for(int ch=0; ch<2; ch++)
+#endif
   {
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
-      m->zones1.equalizer_y[ch][k] = f[j++];
+      m->zones_L.equalizer_y[ch][k] = f[j++];
   }
-  m->zones1.strength = f[j++];
+  m->zones_L.strength = f[j++];
+#endif
 
+#if USE_ZONES_C==1
+#if USE_ZONES_CHANGE_h==1
   for(int ch=0; ch<3; ch++)
+#else
+  for(int ch=0; ch<2; ch++)
+#endif
   {
     for(int k=0; k<DT_IOP_COLORZONES_BANDS; k++)
-      m->zones2.equalizer_y[ch][k] = f[j++];
+      m->zones_C.equalizer_y[ch][k] = f[j++];
   }
-  m->zones2.strength = f[j++];
+  m->zones_C.strength = f[j++];
 #endif
 
 #if USE_CLUT==1
@@ -394,9 +425,9 @@ static inline void write_xmp(module_params_t *m)
   FILE *f = fopen("input.xmp", "wb");
   fwrite(template_color_head_xmp, template_color_head_xmp_len, 1, f);
 
-  fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_ZONES);
-  fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_ZONES);
-  fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_ZONES);
+  fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_ZONES_h);
+  fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_ZONES_L);
+  fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_ZONES_C);
   fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_CURVE);
   fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_CLUT);
   fprintf(f, "<rdf:li>%d</rdf:li>\n", USE_CORR);
@@ -422,13 +453,13 @@ static inline void write_xmp(module_params_t *m)
   fprintf(f, "</rdf:li>\n");
 #endif
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint8_t *)&m->zones, sizeof(dt_iop_colorzones_params_t));
+  write_hex(f, (uint8_t *)&m->zones_h, sizeof(dt_iop_colorzones_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint8_t *)&m->zones1, sizeof(dt_iop_colorzones_params_t));
+  write_hex(f, (uint8_t *)&m->zones_L, sizeof(dt_iop_colorzones_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
-  write_hex(f, (uint8_t *)&m->zones2, sizeof(dt_iop_colorzones_params_t));
+  write_hex(f, (uint8_t *)&m->zones_C, sizeof(dt_iop_colorzones_params_t));
   fprintf(f, "</rdf:li>\n");
   fprintf(f, "<rdf:li>");
   write_hex(f, (uint8_t *)&m->curve, sizeof(dt_iop_tonecurve_params_t));
@@ -456,8 +487,9 @@ static inline void distort_samples(float *sample, int sample_cnt)
   const float c = 1.0f;
   for(int k=0;k<sample_cnt/3;k++)
   {
-    sample[3*k+0] += c*(sample[3*k+0]-sample[3*k+1]);
-    sample[3*k+2] += c*(sample[3*k+2]-sample[3*k+1]);
+    sample[3*k+0] = c*(sample[3*k+0]-sample[3*k+1]);
+    sample[3*k+2] = c*(sample[3*k+2]-sample[3*k+1]);
+    sample[3*k+1] = sample[3*k+0] + sample[3*k+1] + sample[3*k+2];
   }
 }
 

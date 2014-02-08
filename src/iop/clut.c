@@ -645,12 +645,11 @@ dt_iop_clut_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user
     // double click resets:
     if(g->selected >= 0)
     {
-      // TODO: not sure this makes sense. rather delete the point.
-      // if(g->selected & 1)
-      for(int k=0;k<3;k++) p->y[g->selected/2][k] = p->x[g->selected/2][k];
-      p->r[g->selected/2][0] = .10f;
-      p->r[g->selected/2][1] = .10f;
-      p->r[g->selected/2][2] = .10f;
+      // only reset current projection:
+      p->y[g->selected/2][ci] = p->x[g->selected/2][ci];
+      p->y[g->selected/2][cj] = p->x[g->selected/2][cj];
+      p->r[g->selected/2][ci] = .10f;
+      p->r[g->selected/2][cj] = .10f;
     }
     else
     { // reset everything
@@ -711,6 +710,7 @@ dt_iop_clut_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_dat
 
   if(g->selected < 0) return FALSE;
   const float step = 4.0f/5.0f;
+  const float scale[3] = {100.0f, 128.0f, 2.0f*M_PI};
   int ci, cj;
   if(g->projection == 0)
   { // C/h
@@ -724,11 +724,31 @@ dt_iop_clut_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_dat
   { // h/L
     ci = 2; cj = 0;
   }
-  float *r = &p->r[g->selected/2][ci];
-  if((event->state & modifiers) == GDK_CONTROL_MASK)
-    r = &p->r[g->selected/2][cj];
-  if(event->direction == GDK_SCROLL_UP   && *r > 0.001) *r *= step;
-  if(event->direction == GDK_SCROLL_DOWN && *r < 10.00) *r /= step;
+  if((event->state & modifiers) & GDK_SHIFT_MASK)
+  {
+    int c = ci;
+    if((event->state & modifiers) & GDK_CONTROL_MASK) c = cj;
+    if(c == 2)
+    {
+      if(event->direction == GDK_SCROLL_UP  ) p->y[g->selected/2][c] -= scale[c]*0.0005f;
+      if(event->direction == GDK_SCROLL_DOWN) p->y[g->selected/2][c] += scale[c]*0.0005f;
+      if(p->y[g->selected/2][c] < 0.0f)     p->y[g->selected/2][c] += scale[c];
+      if(p->y[g->selected/2][c] > scale[c]) p->y[g->selected/2][c] -= scale[c];
+    }
+    else
+    {
+      if(event->direction == GDK_SCROLL_UP   && p->y[g->selected/2][c] > 0.0)      p->y[g->selected/2][c] -= scale[c]*0.0005f;
+      if(event->direction == GDK_SCROLL_DOWN && p->y[g->selected/2][c] < scale[c]) p->y[g->selected/2][c] += scale[c]*0.0005f;
+    }
+  }
+  else
+  {
+    float *r = &p->r[g->selected/2][ci];
+    if((event->state & modifiers) & GDK_CONTROL_MASK)
+      r = &p->r[g->selected/2][cj];
+    if(event->direction == GDK_SCROLL_UP   && *r > 0.001) *r *= step;
+    if(event->direction == GDK_SCROLL_DOWN && *r < 10.00) *r /= step;
+  }
   dt_dev_add_history_item(darktable.develop, self, TRUE);
   gtk_widget_queue_draw(widget);
   return TRUE;

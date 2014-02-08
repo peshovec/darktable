@@ -201,10 +201,12 @@ lookup(const float *lut, const float i)
 static float
 lookup_wrap(const float *lut, const float i)
 {
-  const int bin0 = MIN(0xffff, MAX(0, (int)(DT_IOP_COLORZONES_LUT_RES * i)));
-  int bin1 = MAX(0, (int)(DT_IOP_COLORZONES_LUT_RES * i) + 1);
+  const int bin0f = (DT_IOP_COLORZONES_LUT_RES-1)*i + 0.5f;
+  const int bin0i = (int)bin0f;
+  const int bin0 = MIN(0xffff, MAX(0, bin0i));
+  int bin1 = MAX(0, bin0i + 1);
   if(bin1 > 0xffff) bin1 -= 0xffff;
-  const float f = DT_IOP_COLORZONES_LUT_RES * i - bin0;
+  const float f = bin0f - bin0;
   return lut[bin1]*f + lut[bin0]*(1.-f);
 }
 
