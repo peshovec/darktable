@@ -42,7 +42,7 @@ DT_MODULE(1)
 
 #define DT_CLUT_INSET 5
 #define DT_CLUT_MAX 40.
-#define DT_CLUT_MAX_POINTS 64
+#define DT_CLUT_MAX_POINTS 288
 
 typedef struct dt_iop_clut_params_t
 {

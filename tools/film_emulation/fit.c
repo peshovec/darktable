@@ -17,11 +17,11 @@
 // define this to optimize for monochrome images
 #define USE_MONOCHROME 0
 #define USE_EXPOSURE 0
-#define USE_ZONES_L 1
-#define USE_ZONES_C 1
+#define USE_ZONES_L 0
+#define USE_ZONES_C 0
 #define USE_ZONES_h 0
 #define USE_ZONES_CHANGE_h 0
-#define USE_CURVE 0
+#define USE_CURVE 1
 #define USE_AB_CURVES 1
 #define USE_SATURATION 0
 #define USE_CORR 0
@@ -30,7 +30,7 @@
 // clut
 // ======================================================================
 static const int clut_version = 1;
-#define DT_CLUT_MAX_POINTS 64
+#define DT_CLUT_MAX_POINTS 288
 
 typedef struct dt_iop_clut_params_t
 {
